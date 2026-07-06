@@ -1,157 +1,114 @@
-spawn(function()
-    wait(0.3)
+-- 全注入器兼容 UI 脚本（带调试输出）
+print("=== 脚本开始执行 ===")
+
+-- 替换spawn，兼容所有执行环境
+coroutine.wrap(function()
+    wait(0.5)
+    print("开始创建UI...")
+
+    local Players = game:GetService("Players")
     local UserInputService = game:GetService("UserInputService")
-    local localPlayer = game:GetService("Players").LocalPlayer
-    local coreGui = localPlayer:WaitForChild("PlayerGui")
+    local localPlayer = Players.LocalPlayer
 
-    local mainUI = Instance.new("ScreenGui")
-    mainUI.Name = tostring(math.random(1000,9999))
-    mainUI.ResetOnSpawn = false
-    mainUI.ZIndexBehavior = Enum.ZIndexBehavior.Sibling
-    mainUI.Parent = coreGui
+    if not localPlayer then
+        warn("错误：还没加载到本地玩家，请等人物出现后再运行")
+        return
+    end
 
-    local panelVisible = false
-    local panelScale = 1
+    local PlayerGui = localPlayer:WaitForChild("PlayerGui", 5)
+    if not PlayerGui then
+        warn("错误：找不到PlayerGui，游戏环境异常")
+        return
+    end
 
-    local toggleFloatBtn = Instance.new("TextButton")
-    toggleFloatBtn.Size = UDim2.new(0, 120, 0, 40)
-    toggleFloatBtn.Position = UDim2.new(0.82, 0, 0.3, 0)
-    toggleFloatBtn.BackgroundColor3 = Color3.new(0.15,0.15,0.15)
-    toggleFloatBtn.BorderSizePixel = 2
-    toggleFloatBtn.BorderColor3 = Color3.new(0.6,0.6,0.6)
-    toggleFloatBtn.Text = "功能开关"
-    toggleFloatBtn.TextColor3 = Color3.new(1,1,1)
-    toggleFloatBtn.Font = Enum.Font.SourceSansBold
-    toggleFloatBtn.TextSize = 16
-    toggleFloatBtn.Active = true
-    toggleFloatBtn.ZIndex = 999
-    toggleFloatBtn.Parent = mainUI
+    -- 创建主UI
+    local ScreenGui = Instance.new("ScreenGui")
+    ScreenGui.Name = "TestUI_"..math.random(1000,9999)
+    ScreenGui.ResetOnSpawn = false
+    ScreenGui.ZIndexBehavior = Enum.ZIndexBehavior.Sibling
+    ScreenGui.Parent = PlayerGui
 
-    local dragStartPos, btnOriginPos, dragging = nil, nil, false
-    toggleFloatBtn.InputBegan:Connect(function(input)
-        if input.UserInputType == Enum.UserInputType.Touch then
-            dragStartPos = input.Position
-            btnOriginPos = toggleFloatBtn.Position
-            dragging = false
+    -- 悬浮开关按钮
+    local ToggleBtn = Instance.new("TextButton")
+    ToggleBtn.Size = UDim2.new(0, 120, 0, 45)
+    ToggleBtn.Position = UDim2.new(0.8, 0, 0.3, 0)
+    ToggleBtn.BackgroundColor3 = Color3.fromRGB(30, 30, 30)
+    ToggleBtn.BorderColor3 = Color3.fromRGB(120, 120, 120)
+    ToggleBtn.BorderSizePixel = 2
+    ToggleBtn.Text = "功能开关"
+    ToggleBtn.TextColor3 = Color3.fromRGB(255,255,255)
+    ToggleBtn.TextSize = 16
+    ToggleBtn.Font = Enum.Font.SourceSansBold
+    ToggleBtn.Active = true
+    ToggleBtn.ZIndex = 999
+    ToggleBtn.Parent = ScreenGui
+
+    print("✅ UI按钮创建成功，屏幕右侧应该出现「功能开关」按钮")
+
+    -- 面板（默认隐藏）
+    local MainPanel = Instance.new("Frame")
+    MainPanel.Size = UDim2.new(0, 300, 0, 400)
+    MainPanel.Position = UDim2.new(0.02, 0, 0.2, 0)
+    MainPanel.BackgroundColor3 = Color3.fromRGB(20,20,20)
+    MainPanel.BorderColor3 = Color3.fromRGB(80,80,80)
+    MainPanel.BorderSizePixel = 3
+    MainPanel.Visible = false
+    MainPanel.Active = true
+    MainPanel.ZIndex = 998
+    MainPanel.Parent = ScreenGui
+
+    -- 开关功能
+    local isPanelOpen = false
+    local function togglePanel()
+        isPanelOpen = not isPanelOpen
+        MainPanel.Visible = isPanelOpen
+    end
+
+    ToggleBtn.MouseButton1Click:Connect(togglePanel)
+    ToggleBtn.TouchTap:Connect(togglePanel)
+
+    -- 按钮拖拽（兼容触屏）
+    local dragToggle = false
+    local dragStart, startPos
+
+    ToggleBtn.InputBegan:Connect(function(input)
+        if input.UserInputType == Enum.UserInputType.Touch or input.UserInputType == Enum.UserInputType.MouseButton1 then
+            dragToggle = true
+            dragStart = input.Position
+            startPos = ToggleBtn.Position
         end
     end)
+
     UserInputService.InputChanged:Connect(function(input)
-        if dragStartPos and input.UserInputType == Enum.UserInputType.Touch then
-            local offset = input.Position - dragStartPos
-            if math.abs(offset.X) > 12 or math.abs(offset.Y) > 12 then
-                dragging = true
-                toggleFloatBtn.Position = UDim2.new(btnOriginPos.X.Scale, btnOriginPos.X.Offset + offset.X, btnOriginPos.Y.Scale, btnOriginPos.Y.Offset + offset.Y)
-            end
+        if dragToggle and (input.UserInputType == Enum.UserInputType.Touch or input.UserInputType == Enum.UserInputType.MouseMovement) then
+            local delta = input.Position - dragStart
+            ToggleBtn.Position = UDim2.new(
+                startPos.X.Scale,
+                startPos.X.Offset + delta.X,
+                startPos.Y.Scale,
+                startPos.Y.Offset + delta.Y
+            )
         end
     end)
 
-    local mainPanel = Instance.new("Frame")
-    mainPanel.Size = UDim2.new(0, 300, 0, 400)
-    mainPanel.Position = UDim2.new(0.02,0,0.2,0)
-    mainPanel.BackgroundColor3 = Color3.new(0.07,0.07,0.07)
-    mainPanel.BorderSizePixel = 3
-    mainPanel.BorderColor3 = Color3.new(0.35,0.35,0.35)
-    mainPanel.Visible = false
-    mainPanel.Active = true
-    mainPanel.ZIndex = 998
-    mainPanel.Parent = mainUI
-
-    local function switchPanel()
-        panelVisible = not panelVisible
-        mainPanel.Visible = panelVisible
-    end
-    toggleFloatBtn.MouseButton1Click:Connect(switchPanel)
-    toggleFloatBtn.InputEnded:Connect(function(input)
-        if input.UserInputType == Enum.UserInputType.Touch and not dragging then
-            switchPanel()
+    UserInputService.InputEnded:Connect(function(input)
+        if input.UserInputType == Enum.UserInputType.Touch or input.UserInputType == Enum.UserInputType.MouseButton1 then
+            dragToggle = false
         end
-        dragStartPos, dragging = nil, false
     end)
 
-    local zoomAdd = Instance.new("TextButton")
-    zoomAdd.Size = UDim2.new(0, 30, 0, 30)
-    zoomAdd.Position = UDim2.new(1, -65, 0, 5)
-    zoomAdd.BackgroundColor3 = Color3.new(0.2,0.2,0.2)
-    zoomAdd.Text = "+"
-    zoomAdd.TextColor3 = Color3.new(1,1,1)
-    zoomAdd.Font = Enum.Font.SourceSansBold
-    zoomAdd.TextSize = 18
-    zoomAdd.Parent = mainPanel
-    zoomAdd.MouseButton1Click:Connect(function()
-        panelScale = math.clamp(panelScale + 0.1, 0.6, 1.6)
-        mainPanel.Size = UDim2.new(0, 300 * panelScale, 0, 400 * panelScale)
-    end)
+    -- 面板标题
+    local Title = Instance.new("TextLabel")
+    Title.Size = UDim2.new(1, -20, 0, 30)
+    Title.Position = UDim2.new(0, 10, 0, 10)
+    Title.BackgroundTransparency = 1
+    Title.Text = "设置面板"
+    Title.TextColor3 = Color3.fromRGB(255,255,255)
+    Title.TextSize = 20
+    Title.Font = Enum.Font.SourceSansBold
+    Title.Parent = MainPanel
 
-    local zoomSub = Instance.new("TextButton")
-    zoomSub.Size = UDim2.new(0, 30, 0, 30)
-    zoomSub.Position = UDim2.new(1, -30, 0, 5)
-    zoomSub.BackgroundColor3 = Color3.new(0.2,0.2,0.2)
-    zoomSub.Text = "-"
-    zoomSub.TextColor3 = Color3.new(1,1,1)
-    zoomSub.Font = Enum.Font.SourceSansBold
-    zoomSub.TextSize = 18
-    zoomSub.Parent = mainPanel
-    zoomSub.MouseButton1Click:Connect(function()
-        panelScale = math.clamp(panelScale - 0.1, 0.6, 1.6)
-        mainPanel.Size = UDim2.new(0, 300 * panelScale, 0, 400 * panelScale)
-    end)
+    print("✅ 面板创建完成，点击按钮可展开")
+end)()
 
-    local titleLabel = Instance.new("TextLabel")
-    titleLabel.Size = UDim2.new(0,240,0,26)
-    titleLabel.Position = UDim2.new(0.05,0,0,8)
-    titleLabel.BackgroundTransparency = 1
-    titleLabel.TextColor3 = Color3.new(1,1,1)
-    titleLabel.Font = Enum.Font.SourceSansBold
-    titleLabel.TextSize = 18
-    titleLabel.Text = "设置面板"
-    titleLabel.Parent = mainPanel
-
-    local modeBtn = Instance.new("TextButton")
-    modeBtn.Size = UDim2.new(0, 100, 0, 32)
-    modeBtn.Position = UDim2.new(0.05,0,0.75,0)
-    modeBtn.BackgroundColor3 = Color3.new(0.2,0.2,0.2)
-    modeBtn.TextColor3 = Color3.new(1,1,1)
-    modeBtn.Text = "模式：通用"
-    modeBtn.Font = Enum.Font.SourceSans
-    modeBtn.TextSize = 14
-    modeBtn.Parent = mainPanel
-
-    local nameTip = Instance.new("TextLabel")
-    nameTip.Size = UDim2.new(0,90,0,24)
-    nameTip.Position = UDim2.new(0.4,0,0.75,0)
-    nameTip.BackgroundTransparency = 1
-    nameTip.TextColor3 = Color3.new(1,1,1)
-    nameTip.TextSize = 14
-    nameTip.Text = "玩家名称"
-    nameTip.Parent = mainPanel
-
-    local nameInput = Instance.new("TextBox")
-    nameInput.Size = UDim2.new(0,130,0,28)
-    nameInput.Position = UDim2.new(0.4,0,0.82,0)
-    nameInput.Text = ""
-    nameInput.TextColor3 = Color3.new(0,0,0)
-    nameInput.BackgroundColor3 = Color3.new(0.9,0.9,0.9)
-    nameInput.Active = true
-    nameInput.Parent = mainPanel
-end)
-
-local function SetWalkSpeed(speed)
-    local lp = game.Players.LocalPlayer
-    local char = lp.Character
-    if not char then return end
-    local hum = char:FindFirstChildOfClass("Humanoid")
-    if hum then
-        hum.WalkSpeed = speed
-    end
-end
-
-local function LoadFlyV3()
-    local flyUrl = "https://mirror.ghproxy.com/https://raw.githubusercontent.com/mciklw/mciklwscript/refs/heads/main/flyvthree"
-    local ok, err = pcall(function()
-        loadstring(game:HttpGet(flyUrl))()
-    end)
-    if not ok then
-        warn("飞行脚本加载失败："..tostring(err))
-    end
-end
-print("UI界面加载成功")
+print("=== 脚本加载完成 ===")
