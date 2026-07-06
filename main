@@ -5,27 +5,29 @@ local UserInputService = game:GetService("UserInputService")
 
 local localPlr = Players.LocalPlayer
 local localGui = Instance.new("ScreenGui")
-localGui.Name = "FunctionSwitchPanel"
+localGui.Name = "FuncPanel"
 localGui.ResetOnSpawn = false
 localGui.Parent = localPlr:WaitForChild("PlayerGui")
 
 -- 功能开关变量
-local WallTransEsp = false
+local PlayerESP = false
 local WalkJumpMod = false
+local PanelVisible = false -- 主面板显示状态
 
--- 默认原版数值
+-- 游戏原生默认数值
 local defaultWalk = 16
 local defaultJump = 50
 local walkSpeedVal = 35
 local jumpPowerVal = 75
 
 local localChar, localHum
+local playerCache = {} -- 玩家缓存，大幅减少掉帧
 
--- 刷新角色属性函数
-local function RefreshCharacter()
+-- 刷新自身角色移速跳跃
+local function RefreshChar()
     localChar = localPlr.Character or localPlr.CharacterAdded:Wait()
     localHum = localChar:WaitForChild("Humanoid")
-    task.wait(0.05)
+    task.wait(0.03)
     if WalkJumpMod then
         localHum.WalkSpeed = walkSpeedVal
         localHum.JumpPower = jumpPowerVal
@@ -34,39 +36,106 @@ local function RefreshCharacter()
         localHum.JumpPower = defaultJump
     end
 end
-RefreshCharacter()
+RefreshChar()
 
--- 角色重生监听
+-- 角色重生自动重载属性
 localPlr.CharacterAdded:Connect(function()
-    task.wait(0.1)
-    RefreshCharacter()
+    task.wait(0.08)
+    RefreshChar()
 end)
 
--- 统一设置墙体透明/还原
-local function RefreshWall()
-    for _, obj in ipairs(workspace:GetDescendants()) do
-        if obj:IsA("BasePart") and not obj:IsDescendantOf(Players) then
-            obj.Transparency = WallTransEsp and 0.6 or 0
-            obj.CanCollide = not WallTransEsp
+-- 玩家进出缓存管理，避免全局遍历掉帧
+Players.PlayerAdded:Connect(function(p)
+    table.insert(playerCache, p)
+end)
+Players.PlayerRemoving:Connect(function(p)
+    for i,v in ipairs(playerCache) do
+        if v == p then
+            table.remove(playerCache, i)
+            break
+        end
+    end
+end)
+
+-- 低负载人物透视渲染（不遍历墙体，无掉帧）
+RunService.RenderStepped:Connect(function()
+    if not PlayerESP then return end
+    for _,plr in ipairs(playerCache) do
+        if plr ~= localPlr and plr.Character then
+            for _,part in ipairs(plr.Character:GetChildren()) do
+                if part:IsA("BasePart") then
+                    part.LocalTransparencyModifier = -0.8
+                end
+            end
+        end
+    end
+end)
+
+-- 关闭透视恢复所有玩家渲染
+local function ResetAllPlayerVis()
+    for _,plr in ipairs(playerCache) do
+        if plr.Character then
+            for _,part in ipairs(plr.Character:GetChildren()) do
+                if part:IsA("BasePart") then
+                    part.LocalTransparencyModifier = 0
+                end
+            end
         end
     end
 end
 
--- 持续循环渲染
-RunService.RenderStepped:Connect(function()
-    RefreshWall()
+-- ===================== 可拖动迷你悬浮按钮 =====================
+local DragButton = Instance.new("TextButton")
+DragButton.Size = UDim2.new(0, 55, 0, 55)
+DragButton.Position = UDim2.new(0.86, 0, 0.32, 0)
+DragButton.BackgroundColor3 = Color3.new(0.15,0.15,0.15)
+DragButton.BorderSizePixel = 2
+DragButton.BorderColor3 = Color3.new(0.6,0.6,0.6)
+DragButton.Text = "开关"
+DragButton.TextColor3 = Color3.new(1,1,1)
+DragButton.Font = Enum.Font.SourceSansBold
+DragButton.TextSize = 16
+DragButton.ZIndex = 999
+DragButton.Parent = localGui
+
+-- 拖动逻辑
+local dragStart, startPos
+DragButton.InputBegan:Connect(function(input)
+    if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
+        dragStart = input.Position
+        startPos = DragButton.Position
+        UserInputService.MouseIconEnabled = false
+    end
+end)
+DragButton.InputChanged:Connect(function(input)
+    if input.UserInputType == Enum.UserInputType.MouseMovement or input.UserInputType == Enum.UserInputType.Touch then
+        local delta = input.Position - dragStart
+        DragButton.Position = UDim2.new(startPos.X.Scale, startPos.X.Offset + delta.X, startPos.Y.Scale, startPos.Y.Offset + delta.Y)
+    end
+end)
+DragButton.InputEnded:Connect(function(input)
+    if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
+        dragStart = nil
+        UserInputService.MouseIconEnabled = true
+    end
 end)
 
--- UI面板主体
+-- 点击迷你按钮 显示/隐藏大面板
+DragButton.MouseButton1Click:Connect(function()
+    PanelVisible = not PanelVisible
+    MainFrame.Visible = PanelVisible
+end)
+
+-- ===================== 主功能面板（默认隐藏） =====================
 local MainFrame = Instance.new("Frame")
 MainFrame.Size = UDim2.new(0,240,0,220)
 MainFrame.Position = UDim2.new(0.01,0,0.25,0)
 MainFrame.BackgroundColor3 = Color3.new(0.1,0.1,0.1)
 MainFrame.BorderSizePixel = 3
 MainFrame.BorderColor3 = Color3.new(0.35,0.35,0.35)
+MainFrame.Visible = false
 MainFrame.Parent = localGui
 
--- 标题
 local Title = Instance.new("TextLabel")
 Title.Size = UDim2.new(0,220,0,24)
 Title.Position = UDim2.new(0,10,0,6)
@@ -77,27 +146,27 @@ Title.TextSize = 18
 Title.Text = "功能开关面板"
 Title.Parent = MainFrame
 
--- 墙体透视按钮
-local WallBtn = Instance.new("TextButton")
-WallBtn.Size = UDim2.new(0,220,0,32)
-WallBtn.Position = UDim2.new(0,10,0,36)
-WallBtn.BackgroundColor3 = Color3.new(0.2,0.2,0.2)
-WallBtn.TextColor3 = Color3.new(1,1,1)
-WallBtn.Font = Enum.Font.SourceSans
-WallBtn.TextSize = 16
-WallBtn.Text = "墙体内透：关闭"
-WallBtn.Parent = MainFrame
+-- 人物透视按钮
+local ESPBtn = Instance.new("TextButton")
+ESPBtn.Size = UDim2.new(0,220,0,32)
+ESPBtn.Position = UDim2.new(0,10,0,36)
+ESPBtn.BackgroundColor3 = Color3.new(0.2,0.2,0.2)
+ESPBtn.TextColor3 = Color3.new(1,1,1)
+ESPBtn.Font = Enum.Font.SourceSans
+ESPBtn.TextSize = 16
+ESPBtn.Text = "人物透视：关闭"
+ESPBtn.Parent = MainFrame
 
-WallBtn.MouseButton1Click:Connect(function()
-    WallTransEsp = not WallTransEsp
-    if WallTransEsp then
-        WallBtn.Text = "墙体内透：开启"
-        WallBtn.BackgroundColor3 = Color3.new(0,0.4,0)
+ESPBtn.MouseButton1Click:Connect(function()
+    PlayerESP = not PlayerESP
+    if PlayerESP then
+        ESPBtn.Text = "人物透视：开启"
+        ESPBtn.BackgroundColor3 = Color3.new(0,0.4,0)
     else
-        WallBtn.Text = "墙体内透：关闭"
-        WallBtn.BackgroundColor3 = Color3.new(0.2,0.2,0.2)
+        ESPBtn.Text = "人物透视：关闭"
+        ESPBtn.BackgroundColor3 = Color3.new(0.2,0.2,0.2)
+        ResetAllPlayerVis()
     end
-    RefreshWall()
 end)
 
 -- 移速跳跃开关按钮
@@ -126,7 +195,7 @@ StatBtn.MouseButton1Click:Connect(function()
     end
 end)
 
--- 移速文字
+-- 移速输入框
 local SpeedTip = Instance.new("TextLabel")
 SpeedTip.Size = UDim2.new(0,100,0,22)
 SpeedTip.Position = UDim2.new(0,10,0,112)
@@ -136,7 +205,6 @@ SpeedTip.TextSize = 15
 SpeedTip.Text = "移速(1-500)"
 SpeedTip.Parent = MainFrame
 
--- 移速输入框
 local SpeedInput = Instance.new("TextBox")
 SpeedInput.Size = UDim2.new(0,110,0,26)
 SpeedInput.Position = UDim2.new(0,120,0,110)
@@ -157,7 +225,7 @@ SpeedInput.FocusLost:Connect(function()
     end
 end)
 
--- 跳跃文字
+-- 跳跃输入框
 local JumpTip = Instance.new("TextLabel")
 JumpTip.Size = UDim2.new(0,100,0,22)
 JumpTip.Position = UDim2.new(0,10,0,148)
@@ -167,7 +235,6 @@ JumpTip.TextSize = 15
 JumpTip.Text = "跳跃(1-300)"
 JumpTip.Parent = MainFrame
 
--- 跳跃输入框
 local JumpInput = Instance.new("TextBox")
 JumpInput.Size = UDim2.new(0,110,0,26)
 JumpInput.Position = UDim2.new(0,120,0,146)
@@ -188,4 +255,9 @@ JumpInput.FocusLost:Connect(function()
     end
 end)
 
-print("✅ 修复版脚本加载完成，开关点击立刻生效")
+-- 初始化玩家缓存
+for _,p in ipairs(Players:GetPlayers()) do
+    table.insert(playerCache, p)
+end
+
+print("可拖动悬浮窗低帧优化脚本加载完成")
