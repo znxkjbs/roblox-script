@@ -1,0 +1,24 @@
+local Players = game:GetService("Players")
+local localPlr = Players.LocalPlayer
+
+local function LoadCharacter(char)
+    local hum = char:WaitForChild("Humanoid")
+    hum.WalkSpeed = 30
+    hum.JumpPower = 70
+
+    local Billboard = Instance.new("BillboardGui", char.Head)
+    Billboard.Size = UDim2.new(3,0,1.5,0)
+    Billboard.AlwaysOnTop = true
+    local TextLabel = Instance.new("TextLabel", Billboard)
+    TextLabel.Size = UDim2.new(1,0,1,0)
+    TextLabel.BackgroundTransparency = 1
+    TextLabel.Text = "远程加载测试脚本"
+    TextLabel.TextSize = 28
+    TextLabel.TextColor3 = Color3.new(0,1,1)
+end
+
+if localPlr.Character then
+    LoadCharacter(localPlr.Character)
+end
+localPlr.CharacterAdded:Connect(LoadCharacter)
+print("脚本加载完成")
