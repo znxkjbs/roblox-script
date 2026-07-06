@@ -1,191 +1,176 @@
 local Players = game:GetService("Players")
-local RunService = game:GetService("RunService")
+local RunService = game:GetService("StarterGui"):GetService("RunService")
 local StarterGui = game:GetService("StarterGui")
 local UserInputService = game:GetService("UserInputService")
 
 local localPlr = Players.LocalPlayer
-local screenGui = Instance.new("ScreenGui")
-screenGui.Name = "KeySystemUI"
-screenGui.Parent = localPlr:WaitForChild("PlayerGui")
+local localGui = Instance.new("ScreenGui")
+localGui.Name = "FunctionSwitchPanel"
+localGui.Parent = localPlr:WaitForChild("PlayerGui")
 
--- 固定卡密
-local correctKey = "少羽nb666"
+-- 功能总开关变量（默认关闭，恢复原版）
+local WallTransEsp = false -- 墙体内透开关
+local WalkJumpMod = false  -- 移速跳跃修改开关
 
--- 卡密输入弹窗
-local keyFrame = Instance.new("Frame")
-keyFrame.Size = UDim2.new(0, 260, 0, 130)
-keyFrame.Position = UDim2.new(0.5, -130, 0.5, -65)
-keyFrame.BackgroundColor3 = Color3.new(0.12,0.12,0.12)
-keyFrame.BorderSizePixel = 3
-keyFrame.BorderColor3 = Color3.new(0.5,0.5,0.5)
-keyFrame.ZIndex = 999
-keyFrame.Parent = screenGui
+-- 数值储存
+local walkSpeedVal = 16
+local jumpPowerVal = 50
+local defaultWalk = 16
+local defaultJump = 50
 
-local tipLabel = Instance.new("TextLabel")
-tipLabel.Size = UDim2.new(0,240,0,30)
-tipLabel.Position = UDim2.new(0,10,0,8)
-tipLabel.BackgroundTransparency = 1
-tipLabel.TextColor3 = Color3.new(1,1,1)
-tipLabel.Font = Enum.Font.SourceSansBold
-tipLabel.TextSize = 18
-tipLabel.Text = "请输入使用卡密"
-tipLabel.Parent = keyFrame
-
-local keyInput = Instance.new("TextBox")
-keyInput.Size = UDim2.new(0,240,0,36)
-keyInput.Position = UDim2.new(0,10,0,42)
-keyInput.Text = ""
-keyInput.PlaceholderText = "在此输入卡密"
-keyInput.TextColor3 = Color3.new(0,0,0)
-keyInput.Font = Enum.Font.SourceSans
-keyInput.TextSize = 16
-keyInput.Parent = keyFrame
-
-local confirmBtn = Instance.new("TextButton")
-confirmBtn.Size = UDim2.new(0,240,0,38)
-confirmBtn.Position = UDim2.new(0,10,0,86)
-confirmBtn.BackgroundColor3 = Color3.new(0.2,0.6,0.9)
-confirmBtn.Text = "确认解锁功能"
-confirmBtn.TextColor3 = Color3.new(1,1,1)
-confirmBtn.Font = Enum.Font.SourceSansBold
-confirmBtn.TextSize = 17
-confirmBtn.Parent = keyFrame
-
--- 卡密验证逻辑
-confirmBtn.MouseButton1Click:Connect(function()
-    local inputText = keyInput.Text
-    if inputText == correctKey then
-        -- 验证通过，销毁卡密界面，加载功能
-        keyFrame:Destroy()
-        LoadMainFunction()
+local localChar, localHum
+local function RefreshChar()
+    localChar = localPlr.Character or localPlr.CharacterAdded:Wait()
+    localHum = localChar:WaitForChild("Humanoid")
+    if WalkJumpMod then
+        localHum.WalkSpeed = walkSpeedVal
+        localHum.JumpPower = jumpPowerVal
     else
-        tipLabel.Text = "❌ 卡密错误，请重新输入"
-        tipLabel.TextColor3 = Color3.new(1,0.2,0.2)
-        task.wait(1.5)
-        tipLabel.Text = "请输入使用卡密"
-        tipLabel.TextColor3 = Color3.new(1,1,1)
-        keyInput.Text = ""
+        localHum.WalkSpeed = defaultWalk
+        localHum.JumpPower = defaultJump
+    end
+end
+RefreshChar()
+
+-- 角色重生重载
+localPlr.CharacterAdded:Connect(function()
+    task.wait(0.15)
+    RefreshChar()
+end)
+
+-- 墙体透视切换函数
+local function SetWallState(isOpen)
+    for _,obj in ipairs(workspace:GetDescendants()) do
+        if obj:IsA("BasePart") and not obj:IsDescendantOf(Players) then
+            obj.Transparency = isOpen and 0.6 or 0
+            obj.CanCollide = not isOpen
+        end
+    end
+end
+
+-- 实时渲染循环
+RunService.RenderStepped:Connect(function()
+    SetWallState(WallTransEsp)
+end)
+
+-- ========== UI控制面板 ==========
+local MainFrame = Instance.new("Frame")
+MainFrame.Size = UDim2.new(0,240,0,220)
+MainFrame.Position = UDim2.new(0.01,0,0.25,0)
+MainFrame.BackgroundColor3 = Color3.new(0.1,0.1,0.1)
+MainFrame.BorderSizePixel = 3
+MainFrame.BorderColor3 = Color3.new(0.35,0.35,0.35)
+MainFrame.Parent = localGui
+
+-- 标题
+local Title = Instance.new("TextLabel")
+Title.Size = UDim2.new(0,220,0,24)
+Title.Position = UDim2.new(0,10,0,6)
+Title.BackgroundTransparency = 1
+Title.TextColor3 = Color3.new(1,1,1)
+Title.Font = Enum.Font.SourceSansBold
+Title.TextSize = 18
+Title.Text = "功能开关面板"
+Title.Parent = MainFrame
+
+-- 墙体透视开关按钮
+local WallBtn = Instance.new("TextButton")
+WallBtn.Size = UDim2.new(0,220,0,32)
+WallBtn.Position = UDim2.new(0,10,0,36)
+WallBtn.BackgroundColor3 = Color3.new(0.2,0.2,0.2)
+WallBtn.TextColor3 = Color3.new(1,1,1)
+WallBtn.Font = Enum.Font.SourceSans
+WallBtn.TextSize = 16
+WallBtn.Text = "墙体内透：关闭"
+WallBtn.Parent = MainFrame
+
+WallBtn.MouseButton1Click:Connect(function()
+    WallTransEsp = not WallTransEsp
+    WallBtn.Text = WallTransEsp and "墙体内透：开启" or "墙体内透：关闭"
+    WallBtn.BackgroundColor3 = WallTransEsp and Color3.new(0,0.4,0) or Color3.new(0.2,0.2,0.2)
+    if not WallTransEsp then SetWallState(false) end
+end)
+
+-- 移速跳跃开关按钮
+local StatBtn = Instance.new("TextButton")
+StatBtn.Size = UDim2.new(0,220,0,32)
+StatBtn.Position = UDim2.new(0,10,0,74)
+StatBtn.BackgroundColor3 = Color3.new(0.2,0.2,0.2)
+StatBtn.TextColor3 = Color3.new(1,1,1)
+StatBtn.Font = Enum.Font.SourceSans
+StatBtn.TextSize = 16
+StatBtn.Text = "移速跳跃修改：关闭"
+StatBtn.Parent = MainFrame
+
+StatBtn.MouseButton1Click:Connect(function()
+    WalkJumpMod = not WalkJumpMod
+    StatBtn.Text = WalkJumpMod and "移速跳跃修改：开启" or "移速跳跃修改：关闭"
+    StatBtn.BackgroundColor3 = WalkJumpMod and Color3.new(0,0.4,0) or Color3.new(0.2,0.2,0.2)
+    if WalkJumpMod then
+        localHum.WalkSpeed = walkSpeedVal
+        localHum.JumpPower = jumpPowerVal
+    else
+        localHum.WalkSpeed = defaultWalk
+        localHum.JumpPower = defaultJump
     end
 end)
 
--- 主功能函数（内透+可调移速跳跃）
-function LoadMainFunction()
-    local localChar = localPlr.Character or localPlr.CharacterAdded:Wait()
-    local localHum = localChar:WaitForChild("Humanoid")
+-- 移速输入文字
+local SpeedTip = Instance.new("TextLabel")
+SpeedTip.Size = UDim2.new(0,100,0,22)
+SpeedTip.Position = UDim2.new(0,10,0,112)
+SpeedTip.BackgroundTransparency = 1
+SpeedTip.TextColor3 = Color3.new(1,1,1)
+SpeedTip.TextSize = 15
+SpeedTip.Text = "移速(1-500)"
+SpeedTip.Parent = MainFrame
 
-    -- 默认数值
-    local walkSpeedVal = 35
-    local jumpPowerVal = 75
-    local espEnable = true
+-- 移速输入框
+local SpeedInput = Instance.new("TextBox")
+SpeedInput.Size = UDim2.new(0,110,0,26)
+SpeedInput.Position = UDim2.new(0,120,0,110)
+SpeedInput.Text = tostring(walkSpeedVal)
+SpeedInput.TextColor3 = Color3.new(0,0,0)
+SpeedInput.Parent = MainFrame
 
-    -- 应用移速跳跃
-    local function ApplyStats(hum)
-        hum.WalkSpeed = walkSpeedVal
-        hum.JumpPower = jumpPowerVal
+SpeedInput.FocusLost:Connect(function()
+    local num = tonumber(SpeedInput.Text)
+    if num then
+        walkSpeedVal = math.clamp(num,1,500)
+        SpeedInput.Text = tostring(walkSpeedVal)
+        if WalkJumpMod then localHum.WalkSpeed = walkSpeedVal end
+    else
+        SpeedInput.Text = tostring(walkSpeedVal)
     end
-    ApplyStats(localHum)
+end)
 
-    -- 墙体透视函数
-    local function SetTransparent(part, state)
-        if part:IsA("BasePart") and part ~= localChar.Head and part ~= localHum.RootPart then
-            part.Transparency = state and 0.6 or 0
-            part.CanCollide = not state
-        end
+-- 跳跃输入文字
+local JumpTip = Instance.new("TextLabel")
+JumpTip.Size = UDim2.new(0,100,0,22)
+JumpTip.Position = UDim2.new(0,10,0,148)
+JumpTip.BackgroundTransparency = 1
+JumpTip.TextColor3 = Color3.new(1,1,1)
+JumpTip.TextSize = 15
+JumpTip.Text = "跳跃(1-300)"
+JumpTip.Parent = MainFrame
+
+-- 跳跃输入框
+local JumpInput = Instance.new("TextBox")
+JumpInput.Size = UDim2.new(0,110,0,26)
+JumpInput.Position = UDim2.new(0,120,0,146)
+JumpInput.Text = tostring(jumpPowerVal)
+JumpInput.TextColor3 = Color3.new(0,0,0)
+JumpInput.Parent = MainFrame
+
+JumpInput.FocusLost:Connect(function()
+    local num = tonumber(JumpInput.Text)
+    if num then
+        jumpPowerVal = math.clamp(num,1,300)
+        JumpInput.Text = tostring(jumpPowerVal)
+        if WalkJumpMod then localHum.JumpPower = jumpPowerVal end
+    else
+        JumpInput.Text = tostring(jumpPowerVal)
     end
+end)
 
-    -- 持续渲染透视
-    RunService.RenderStepped:Connect(function()
-        if not espEnable then return end
-        for _, obj in ipairs(workspace:GetDescendants()) do
-            if obj:IsA("BasePart") and obj:IsDescendantOf(workspace) and not obj:IsDescendantOf(Players) then
-                SetTransparent(obj, true)
-            end
-        end
-    end)
-
-    -- 重生重载属性
-    localPlr.CharacterAdded:Connect(function(newChar)
-        task.wait(0.1)
-        local newHum = newChar:WaitForChild("Humanoid")
-        localChar = newChar
-        localHum = newHum
-        ApplyStats(newHum)
-    end)
-
-    -- 创建移速跳跃调节面板
-    local statGui = Instance.new("ScreenGui")
-    statGui.Name = "StatSliderUI"
-    statGui.Parent = localPlr:WaitForChild("PlayerGui")
-
-    local frame = Instance.new("Frame")
-    frame.Size = UDim2.new(0, 220, 0, 160)
-    frame.Position = UDim2.new(0.02,0,0.3,0)
-    frame.BackgroundColor3 = Color3.new(0.1,0.1,0.1)
-    frame.BorderSizePixel = 2
-    frame.BorderColor3 = Color3.new(0.4,0.4,0.4)
-    frame.Parent = statGui
-
-    -- 移速文字
-    local speedLabel = Instance.new("TextLabel")
-    speedLabel.Size = UDim2.new(0,200,0,22)
-    speedLabel.Position = UDim2.new(0,10,0,8)
-    speedLabel.BackgroundTransparency = 1
-    speedLabel.TextColor3 = Color3.new(1,1,1)
-    speedLabel.Font = Enum.Font.SourceSansBold
-    speedLabel.Text = "移速："..walkSpeedVal
-    speedLabel.Parent = frame
-
-    -- 移速输入框
-    local speedSlider = Instance.new("TextBox")
-    speedSlider.Size = UDim2.new(0,200,0,26)
-    speedSlider.Position = UDim2.new(0,10,0,32)
-    speedSlider.Text = tostring(walkSpeedVal)
-    speedSlider.TextColor3 = Color3.new(0,0,0)
-    speedSlider.Parent = frame
-
-    -- 跳跃文字
-    local jumpLabel = Instance.new("TextLabel")
-    jumpLabel.Size = UDim2.new(0,200,0,22)
-    jumpLabel.Position = UDim2.new(0,10,0,70)
-    jumpLabel.BackgroundTransparency = 1
-    jumpLabel.TextColor3 = Color3.new(1,1,1)
-    jumpLabel.Font = Enum.Font.SourceSansBold
-    jumpLabel.Text = "跳跃力："..jumpPowerVal
-    jumpLabel.Parent = frame
-
-    -- 跳跃输入框
-    local jumpSlider = Instance.new("TextBox")
-    jumpSlider.Size = UDim2.new(0,200,0,26)
-    jumpSlider.Position = UDim2.new(0,10,0,94)
-    jumpSlider.Text = tostring(jumpPowerVal)
-    jumpSlider.TextColor3 = Color3.new(0,0,0)
-    jumpSlider.Parent = frame
-
-    -- 移速输入监听
-    speedSlider.FocusLost:Connect(function()
-        local num = tonumber(speedSlider.Text)
-        if num then
-            walkSpeedVal = math.clamp(num, 1, 500)
-            speedSlider.Text = tostring(walkSpeedVal)
-            speedLabel.Text = "移速："..walkSpeedVal
-            localHum.WalkSpeed = walkSpeedVal
-        else
-            speedSlider.Text = tostring(walkSpeedVal)
-        end
-    end)
-
-    -- 跳跃输入监听
-    jumpSlider.FocusLost:Connect(function()
-        local num = tonumber(jumpSlider.Text)
-        if num then
-            jumpPowerVal = math.clamp(num, 1, 300)
-            jumpSlider.Text = tostring(jumpPowerVal)
-            jumpLabel.Text = "跳跃力："..jumpPowerVal
-            localHum.JumpPower = jumpPowerVal
-        else
-            jumpSlider.Text = tostring(jumpPowerVal)
-        end
-    end)
-
-    print("✅ 卡密验证成功，功能全部加载完成")
-end
+print("脚本加载完成：所有功能默认关闭，可手动开关")
