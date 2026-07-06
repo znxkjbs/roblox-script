@@ -1,10 +1,8 @@
--- 混淆防检测底层
 local task = task
 local delay = task.delay
 local new = Instance.new
 local getSvc = game:GetService
 
--- 延迟0.3秒加载规避开局扫描
 delay(0.3, function()
     local Players = getSvc("Players")
     local RunService = getSvc("RunService")
@@ -12,8 +10,8 @@ delay(0.3, function()
     local Workspace = getSvc("Workspace")
     local localPlr = Players.LocalPlayer
     local CoreGui = localPlr:WaitForChild("PlayerGui")
+    local mouse = localPlr:GetMouse()
 
-    -- 随机命名GUI消除特征
     local guiMain = new("ScreenGui")
     guiMain.Name = tostring(math.random(1000,9999))
     guiMain.ResetOnSpawn = false
@@ -26,29 +24,28 @@ delay(0.3, function()
     guiRender.AlwaysOnTop = true
     guiRender.Parent = CoreGui
 
-    -- 功能控制变量
-    local AimbotOn = false
-    local LockTarget = "Head"
-    local FovSize = 300 -- 1~500屏幕FOV圈范围
+    local AssistSwitch = false
+    local LockPart = "Head"
+    local OuterFOV = 380
+    local InnerFOV = 180
     local PanelShow = false
     local localChar, localHRP
 
-    -- 刷新自身角色根部件
-    local function RefreshPlayer()
+    local function RefreshSelf()
         localChar = localPlr.Character or localPlr.CharacterAdded:Wait()
         localHRP = localChar:WaitForChild("HumanoidRootPart")
     end
-    RefreshPlayer()
-    localPlr.CharacterAdded:Connect(RefreshPlayer)
+    RefreshSelf()
+    localPlr.CharacterAdded:Connect(RefreshSelf)
 
-    -- 可拖动圆形悬浮按钮
+    -- 可拖动悬浮按钮
     local FloatBtn = new("TextButton")
     FloatBtn.Size = UDim2.new(0, 60, 0, 60)
     FloatBtn.Position = UDim2.new(0.84, 0, 0.3, 0)
     FloatBtn.BackgroundColor3 = Color3.new(0.1,0.1,0.1)
     FloatBtn.BorderSizePixel = 3
     FloatBtn.BorderColor3 = Color3.new(0.7,0.7,0.7)
-    FloatBtn.Text = "瞄准"
+    FloatBtn.Text = "追踪"
     FloatBtn.TextColor3 = Color3.new(1,1,1)
     FloatBtn.Font = Enum.Font.SourceSansBold
     FloatBtn.TextSize = 16
@@ -73,22 +70,21 @@ delay(0.3, function()
             end
         end
     end)
-    -- 双兼容触摸点击，修复点了没反应
-    FloatBtn.MouseButton1Click:Connect(function()
+    local function TogglePanel()
         PanelShow = not PanelShow
         SettingPanel.Visible = PanelShow
-    end)
+    end
+    FloatBtn.MouseButton1Click:Connect(TogglePanel)
     FloatBtn.InputEnded:Connect(function(input)
         if input.UserInputType == Enum.UserInputType.Touch and not isDrag then
-            PanelShow = not PanelShow
-            SettingPanel.Visible = PanelShow
+            TogglePanel()
         end
         dragStart, isDrag = nil, false
     end)
 
     -- 设置面板
     local SettingPanel = new("Frame")
-    SettingPanel.Size = UDim2.new(0, 260, 0, 280)
+    SettingPanel.Size = UDim2.new(0, 260, 0, 320)
     SettingPanel.Position = UDim2.new(0.02,0,0.2,0)
     SettingPanel.BackgroundColor3 = Color3.new(0.08,0.08,0.08)
     SettingPanel.BorderSizePixel = 3
@@ -104,96 +100,115 @@ delay(0.3, function()
     Title.TextColor3 = Color3.new(1,1,1)
     Title.Font = Enum.Font.SourceSansBold
     Title.TextSize = 18
-    Title.Text = "FOV范围瞄准设置"
+    Title.Text = "双层FOV射线追踪辅助"
     Title.Parent = SettingPanel
 
-    -- 总开关（双触摸兼容）
-    local SwitchAll = new("TextButton")
-    SwitchAll.Size = UDim2.new(0,240,0,34)
-    SwitchAll.Position = UDim2.new(0,10,0,40)
-    SwitchAll.BackgroundColor3 = Color3.new(0.2,0.2,0.2)
-    SwitchAll.TextColor3 = Color3.new(1,1,1)
-    SwitchAll.Text = "瞄准功能：关闭"
-    SwitchAll.Font = Enum.Font.SourceSans
-    SwitchAll.TextSize = 16
-    SwitchAll.Active = true
-    SwitchAll.Parent = SettingPanel
-    local function ToggleAim()
-        AimbotOn = not AimbotOn
-        if AimbotOn then
-            SwitchAll.Text = "瞄准功能：开启"
-            SwitchAll.BackgroundColor3 = Color3.new(0,0.4,0)
-        else
-            SwitchAll.Text = "瞄准功能：关闭"
-            SwitchAll.BackgroundColor3 = Color3.new(0.2,0.2,0.2)
-        end
+    -- 总开关
+    local MainSwitch = new("TextButton")
+    MainSwitch.Size = UDim2.new(0,240,0,34)
+    MainSwitch.Position = UDim2.new(0,10,0,40)
+    MainSwitch.BackgroundColor3 = Color3.new(0.2,0.2,0.2)
+    MainSwitch.TextColor3 = Color3.new(1,1,1)
+    MainSwitch.Text = "追踪辅助：关闭"
+    MainSwitch.Font = Enum.Font.SourceSans
+    MainSwitch.TextSize = 16
+    MainSwitch.Active = true
+    MainSwitch.Parent = SettingPanel
+    local function ToggleAssist()
+        AssistSwitch = not AssistSwitch
+        MainSwitch.Text = AssistSwitch and "追踪辅助：开启" or "追踪辅助：关闭"
+        MainSwitch.BackgroundColor3 = AssistSwitch and Color3.new(0,0.4,0) or Color3.new(0.2,0.2,0.2)
     end
-    SwitchAll.MouseButton1Click:Connect(ToggleAim)
-    SwitchAll.InputEnded:Connect(function(input)
-        if input.UserInputType == Enum.UserInputType.Touch then ToggleAim() end
+    MainSwitch.MouseButton1Click:Connect(ToggleAssist)
+    MainSwitch.InputEnded:Connect(function(input)
+        if input.UserInputType == Enum.UserInputType.Touch then ToggleAssist() end
     end)
 
-    -- 头部/身体切换
-    local SwitchMode = new("TextButton")
-    SwitchMode.Size = UDim2.new(0,240,0,34)
-    SwitchMode.Position = UDim2.new(0,10,0,82)
-    SwitchMode.BackgroundColor3 = Color3.new(0.2,0.2,0.2)
-    SwitchMode.TextColor3 = Color3.new(1,1,1)
-    SwitchMode.Text = "锁定目标：头部"
-    SwitchMode.Font = Enum.Font.SourceSans
-    SwitchMode.TextSize = 16
-    SwitchMode.Active = true
-    SwitchMode.Parent = SettingPanel
+    -- 锁定部位切换
+    local ModeSwitch = new("TextButton")
+    ModeSwitch.Size = UDim2.new(0,240,0,34)
+    ModeSwitch.Position = UDim2.new(0,10,0,82)
+    ModeSwitch.BackgroundColor3 = Color3.new(0.2,0.2,0.2)
+    ModeSwitch.TextColor3 = Color3.new(1,1,1)
+    ModeSwitch.Text = "锁定部位：头部"
+    ModeSwitch.Font = Enum.Font.SourceSans
+    ModeSwitch.TextSize = 16
+    ModeSwitch.Active = true
+    ModeSwitch.Parent = SettingPanel
     local function SwapLock()
-        LockTarget = LockTarget == "Head" and "Torso" or "Head"
-        SwitchMode.Text = LockTarget == "Head" and "锁定目标：头部" or "锁定目标：身体"
+        LockPart = LockPart == "Head" and "Torso" or "Head"
+        ModeSwitch.Text = LockPart == "Head" and "锁定部位：头部" or "锁定部位：身体"
     end
-    SwitchMode.MouseButton1Click:Connect(SwapLock)
-    SwitchMode.InputEnded:Connect(function(input)
+    ModeSwitch.MouseButton1Click:Connect(SwapLock)
+    ModeSwitch.InputEnded:Connect(function(input)
         if input.UserInputType == Enum.UserInputType.Touch then SwapLock() end
     end)
 
-    -- FOV范围文字
-    local RangeTip = new("TextLabel")
-    RangeTip.Size = UDim2.new(0,110,0,24)
-    RangeTip.Position = UDim2.new(0,10,0,126)
-    RangeTip.BackgroundTransparency = 1
-    RangeTip.TextColor3 = Color3.new(1,1,1)
-    RangeTip.TextSize = 15
-    RangeTip.Text = "FOV范围(1~500)"
-    RangeTip.Parent = SettingPanel
-
-    -- FOV输入框
-    local RangeInput = new("TextBox")
-    RangeInput.Size = UDim2.new(0,110,0,28)
-    RangeInput.Position = UDim2.new(0,130,0,124)
-    RangeInput.Text = tostring(FovSize)
-    RangeInput.TextColor3 = Color3.new(0,0,0)
-    RangeInput.BackgroundColor3 = Color3.new(0.9,0.9,0.9)
-    RangeInput.Active = true
-    RangeInput.Parent = SettingPanel
-    RangeInput.FocusLost:Connect(function()
-        local num = tonumber(RangeInput.Text)
-        if num then
-            FovSize = math.clamp(num, 1, 500)
-            RangeInput.Text = tostring(FovSize)
-        else
-            RangeInput.Text = tostring(FovSize)
-        end
+    -- 外圈范围输入
+    local OuterTip = new("TextLabel")
+    OuterTip.Size = UDim2.new(0,110,0,24)
+    OuterTip.Position = UDim2.new(0,10,0,126)
+    OuterTip.BackgroundTransparency = 1
+    OuterTip.TextColor3 = Color3.new(1,1,1)
+    OuterTip.TextSize = 15
+    OuterTip.Text = "外圈范围(1~500)"
+    OuterTip.Parent = SettingPanel
+    local OuterInput = new("TextBox")
+    OuterInput.Size = UDim2.new(0,110,0,28)
+    OuterInput.Position = UDim2.new(0,130,0,124)
+    OuterInput.Text = tostring(OuterFOV)
+    OuterInput.TextColor3 = Color3.new(0,0,0)
+    OuterInput.BackgroundColor3 = Color3.new(0.9,0.9,0.9)
+    OuterInput.Active = true
+    OuterInput.Parent = SettingPanel
+    OuterInput.FocusLost:Connect(function()
+        local num = tonumber(OuterInput.Text)
+        if num then OuterFOV = math.clamp(num,1,500) OuterInput.Text = tostring(OuterFOV) end
     end)
 
-    -- 屏幕中心FOV圆圈
-    local FovCircle = new("Frame")
-    FovCircle.Size = UDim2.new(0, FovSize*2, 0, FovSize*2)
-    FovCircle.AnchorPoint = Vector2.new(0.5,0.5)
-    FovCircle.Position = UDim2.new(0.5,0,0.5,0)
-    FovCircle.BackgroundTransparency = 1
-    FovCircle.BorderSizePixel = 2
-    FovCircle.BorderColor3 = Color3.new(1,1,1)
-    FovCircle.Visible = false
-    FovCircle.Parent = guiRender
+    -- 内圈范围输入
+    local InnerTip = new("TextLabel")
+    InnerTip.Size = UDim2.new(0,110,0,24)
+    InnerTip.Position = UDim2.new(0,10,0,166)
+    InnerTip.BackgroundTransparency = 1
+    InnerTip.TextColor3 = Color3.new(1,1,1)
+    InnerTip.TextSize = 15
+    InnerTip.Text = "内圈锁定(1~500)"
+    InnerTip.Parent = SettingPanel
+    local InnerInput = new("TextBox")
+    InnerInput.Size = UDim2.new(0,110,0,28)
+    InnerInput.Position = UDim2.new(0,130,0,164)
+    InnerInput.Text = tostring(InnerFOV)
+    InnerInput.TextColor3 = Color3.new(0,0,0)
+    InnerInput.BackgroundColor3 = Color3.new(0.9,0.9,0.9)
+    InnerInput.Active = true
+    InnerInput.Parent = SettingPanel
+    InnerInput.FocusLost:Connect(function()
+        local num = tonumber(InnerInput.Text)
+        if num then InnerFOV = math.clamp(num,1,500) InnerInput.Text = tostring(InnerFOV) end
+    end)
 
-    -- 瞄准红线
+    -- 双层渲染圈
+    local OuterCircle = new("Frame")
+    OuterCircle.Size = UDim2.new(0, OuterFOV*2, 0, OuterFOV*2)
+    OuterCircle.AnchorPoint = Vector2.new(0.5,0.5)
+    OuterCircle.Position = UDim2.new(0.5,0,0.5,0)
+    OuterCircle.BackgroundTransparency = 1
+    OuterCircle.BorderSizePixel = 2
+    OuterCircle.BorderColor3 = Color3.new(1,1,1)
+    OuterCircle.Visible = false
+    OuterCircle.Parent = guiRender
+
+    local InnerCircle = new("Frame")
+    InnerCircle.Size = UDim2.new(0, InnerFOV*2, 0, InnerFOV*2)
+    InnerCircle.AnchorPoint = Vector2.new(0.5,0.5)
+    InnerCircle.Position = UDim2.new(0.5,0,0.5,0)
+    InnerCircle.BackgroundTransparency = 1
+    InnerCircle.BorderSizePixel = 2
+    InnerCircle.BorderColor3 = Color3.new(1,0,0)
+    InnerCircle.Visible = false
+    InnerCircle.Parent = guiRender
+
     local AimLine = new("Frame")
     AimLine.Size = UDim2.new(0,2,0,0)
     AimLine.AnchorPoint = Vector2.new(0,0.5)
@@ -201,54 +216,57 @@ delay(0.3, function()
     AimLine.Visible = false
     AimLine.Parent = guiRender
 
-    -- 修复核心：屏幕FOV判断+自动相机锁定子弹追踪
+    -- 核心逻辑：只吸附鼠标，不修改镜头
     RunService.RenderStepped:Connect(function()
-        -- 关闭瞄准直接隐藏所有渲染，无后台运算
-        if not AimbotOn or not localHRP then
-            FovCircle.Visible = false
+        if not AssistSwitch or not localHRP then
+            OuterCircle.Visible = false
+            InnerCircle.Visible = false
             AimLine.Visible = false
             return
         end
-        FovCircle.Size = UDim2.new(0, FovSize*2, 0, FovSize*2)
-        FovCircle.Visible = true
+        OuterCircle.Size = UDim2.new(0, OuterFOV*2, 0, OuterFOV*2)
+        InnerCircle.Size = UDim2.new(0, InnerFOV*2, 0, InnerFOV*2)
+        OuterCircle.Visible = true
+        InnerCircle.Visible = true
+
         local cam = Workspace.CurrentCamera
         local screenCenter = Vector2.new(cam.ViewportSize.X/2, cam.ViewportSize.Y/2)
-        local nearestTarget, minScreenDist = nil, math.huge
+        local nearestTarget, minDist = nil, math.huge
+        local targetScreenPos = nil
 
-        -- 遍历所有玩家筛选屏幕圈内目标
         for _,player in ipairs(Players:GetPlayers()) do
-            if player ~= localPlr and player.Character then
-                local targetPart = LockTarget == "Head" and player.Character:FindFirstChild("Head") or player.Character:FindFirstChild("Torso")
-                if not targetPart then continue end
-                -- 转屏幕坐标，判断是否在FOV圆圈内（修复之前只判断世界距离导致失效）
-                local screenPos = cam:WorldToViewportPoint(targetPart.Position)
-                local screenVec = Vector2.new(screenPos.X, screenPos.Y)
-                local screenDist = (screenVec - screenCenter).Magnitude
-                if screenDist < FovSize and screenDist < minScreenDist then
-                    minScreenDist = screenDist
-                    nearestTarget = targetPart
-                end
+            if player == localPlr then continue end
+            if not player.Character then continue end
+            local targetPart = player.Character:FindFirstChild(LockPart)
+            if not targetPart then continue end
+            local screenPos = cam:WorldToViewportPoint(targetPart.Position)
+            local screenVec = Vector2.new(screenPos.X, screenPos.Y)
+            local dist = (screenVec - screenCenter).Magnitude
+            if dist < OuterFOV and dist < minDist then
+                minDist = dist
+                nearestTarget = targetPart
+                targetScreenPos = screenVec
             end
         end
 
-        -- 无圈内目标隐藏红线、不锁镜头
         if not nearestTarget then
             AimLine.Visible = false
             return
         end
 
-        -- 自动锁定相机，实现子弹追踪（你要的追踪效果）
-        cam.CFrame = CFrame.new(cam.Position, nearestTarget.Position)
-
-        -- 绘制中心指向红线
-        local targetScreen = cam:WorldToViewportPoint(nearestTarget.Position)
-        local targetVec = Vector2.new(targetScreen.X, targetScreen.Y)
-        local lineLen = (targetVec - screenCenter).Magnitude
+        -- 绘制指向红线
+        local lineLen = (targetScreenPos - screenCenter).Magnitude
         AimLine.Size = UDim2.new(0, lineLen, 0, 2)
         AimLine.Position = UDim2.new(0.5, screenCenter.X, 0.5, screenCenter.Y)
-        AimLine.Rotation = math.deg(math.atan2(targetVec.Y - screenCenter.Y, targetVec.X - screenCenter.X))
+        AimLine.Rotation = math.deg(math.atan2(targetScreenPos.Y - screenCenter.Y, targetScreenPos.X - screenCenter.X))
         AimLine.Visible = true
+
+        -- 仅内圈吸附鼠标，无镜头修改
+        if minDist < InnerFOV then
+            mouse.X = targetScreenPos.X
+            mouse.Y = targetScreenPos.Y
+        end
     end)
 end)
 
-print("远程FOV瞄准脚本加载完成")
+print("双层FOV射线追踪辅助加载完成｜无自动镜头自瞄")
