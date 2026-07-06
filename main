@@ -8,18 +8,16 @@ delay(0.3, function()
     local localPlayer = game:GetService("Players").LocalPlayer
     local coreGui = localPlayer:WaitForChild("PlayerGui")
 
-    -- 仅单个UI容器
     local mainUI = new("ScreenGui")
     mainUI.Name = tostring(math.random(1000,9999))
     mainUI.ResetOnSpawn = false
     mainUI.ZIndexBehavior = Enum.ZIndexBehavior.Sibling
     mainUI.Parent = coreGui
 
-    -- 全局面板状态
     local panelVisible = false
     local panelScale = 1
 
-    -- 长方形悬浮开关按钮
+    -- 长方形悬浮开关
     local toggleFloatBtn = new("TextButton")
     toggleFloatBtn.Size = UDim2.new(0, 120, 0, 40)
     toggleFloatBtn.Position = UDim2.new(0.82, 0, 0.3, 0)
@@ -51,6 +49,18 @@ delay(0.3, function()
             end
         end
     end)
+
+    local mainPanel = new("Frame")
+    mainPanel.Size = UDim2.new(0, 300, 0, 400)
+    mainPanel.Position = UDim2.new(0.02,0,0.2,0)
+    mainPanel.BackgroundColor3 = Color3.new(0.07,0.07,0.07)
+    mainPanel.BorderSizePixel = 3
+    mainPanel.BorderColor3 = Color3.new(0.35,0.35,0.35)
+    mainPanel.Visible = false
+    mainPanel.Active = true
+    mainPanel.ZIndex = 998
+    mainPanel.Parent = mainUI
+
     local function switchPanel()
         panelVisible = not panelVisible
         mainPanel.Visible = panelVisible
@@ -63,19 +73,7 @@ delay(0.3, function()
         dragStartPos, dragging = nil, false
     end)
 
-    -- 主面板容器
-    local mainPanel = new("Frame")
-    mainPanel.Size = UDim2.new(0, 300, 0, 400)
-    mainPanel.Position = UDim2.new(0.02,0,0.2,0)
-    mainPanel.BackgroundColor3 = Color3.new(0.07,0.07,0.07)
-    mainPanel.BorderSizePixel = 3
-    mainPanel.BorderColor3 = Color3.new(0.35,0.35,0.35)
-    mainPanel.Visible = false
-    mainPanel.Active = true
-    mainPanel.ZIndex = 998
-    mainPanel.Parent = mainUI
-
-    -- 右上角 + 放大按钮
+    -- 缩放按钮
     local zoomAdd = new("TextButton")
     zoomAdd.Size = UDim2.new(0, 30, 0, 30)
     zoomAdd.Position = UDim2.new(1, -65, 0, 5)
@@ -90,7 +88,6 @@ delay(0.3, function()
         mainPanel.Size = UDim2.new(0, 300 * panelScale, 0, 400 * panelScale)
     end)
 
-    -- 右上角 - 缩小按钮
     local zoomSub = new("TextButton")
     zoomSub.Size = UDim2.new(0, 30, 0, 30)
     zoomSub.Position = UDim2.new(1, -30, 0, 5)
@@ -105,7 +102,7 @@ delay(0.3, function()
         mainPanel.Size = UDim2.new(0, 300 * panelScale, 0, 400 * panelScale)
     end)
 
-    -- 面板标题
+    -- 标题
     local titleLabel = new("TextLabel")
     titleLabel.Size = UDim2.new(0,240,0,26)
     titleLabel.Position = UDim2.new(0.05,0,0,8)
@@ -116,7 +113,7 @@ delay(0.3, function()
     titleLabel.Text = "设置面板"
     titleLabel.Parent = mainPanel
 
-    -- 右下角 模式按钮（默认通用）
+    -- 模式按钮
     local modeBtn = new("TextButton")
     modeBtn.Size = UDim2.new(0, 100, 0, 32)
     modeBtn.Position = UDim2.new(0.05,0,0.75,0)
@@ -127,7 +124,7 @@ delay(0.3, function()
     modeBtn.TextSize = 14
     modeBtn.Parent = mainPanel
 
-    -- 玩家名字输入框
+    -- 名字输入框
     local nameTip = new("TextLabel")
     nameTip.Size = UDim2.new(0,90,0,24)
     nameTip.Position = UDim2.new(0.4,0,0.75,0)
@@ -146,26 +143,22 @@ delay(0.3, function()
     nameInput.Active = true
     nameInput.Parent = mainPanel
 end)
-print("纯UI界面加载完成，无任何追踪功能逻辑")
+print("UI加载完成")
 
--- 移速控制函数（防报错优化）
+-- 移速函数
 local function SetWalkSpeed(speed)
     local lp = game.Players.LocalPlayer
     local char = lp.Character
     if not char then return end
     local hum = char:FindFirstChildOfClass("Humanoid")
-    if hum then
-        hum.WalkSpeed = speed
-    end
+    if hum then hum.WalkSpeed = speed end
 end
 
--- 飞行脚本加载（国内镜像加速，捕获错误不崩溃）
+-- 飞行加载（容错）
 local function LoadFlyV3()
     local flyUrl = "https://mirror.ghproxy.com/https://raw.githubusercontent.com/mciklw/mciklwscript/refs/heads/main/flyvthree"
     local ok, err = pcall(function()
         loadstring(game:HttpGet(flyUrl))()
     end)
-    if not ok then
-        warn("飞行脚本加载失败："..tostring(err))
-    end
+    if not ok then warn("飞行加载失败:"..err) end
 end
