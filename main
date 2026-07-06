@@ -264,4 +264,4 @@ JumpInput.FocusLost:Connect(function()
     end
 end)
 
-print("✅ 忍者注入器触摸点击修复版加载完成")
+print("忍者注入器触摸点击修复版加载完成")
