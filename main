@@ -1,267 +1,227 @@
-local Players = game:GetService("Players")
-local RunService = game:GetService("RunService")
-local StarterGui = game:GetService("StarterGui")
-local UserInputService = game:GetService("UserInputService")
+-- 基础防检测混淆延迟加载层
+local task = task
+local wait = task.wait
+local spawn = task.spawn
+local delay = task.delay
+local new = Instance.new
+local getSvc = game:GetService
 
-local localPlr = Players.LocalPlayer
-local localGui = Instance.new("ScreenGui")
-localGui.Name = "FuncPanel"
-localGui.ResetOnSpawn = false
-localGui.ZIndexBehavior = Enum.ZIndexBehavior.Sibling
-localGui.Parent = localPlr:WaitForChild("PlayerGui")
+-- 延迟初始化，规避上线即时扫描
+delay(0.25, function()
+    local Players = getSvc("Players")
+    local RunService = getSvc("RunService")
+    local UserInputService = getSvc("UserInputService")
+    local Workspace = getSvc("Workspace")
+    local CoreGui = Players.LocalPlayer:WaitForChild("PlayerGui")
 
--- 功能开关变量
-local PlayerESP = false
-local WalkJumpMod = false
-local PanelVisible = false
+    -- 随机命名防特征检测
+    local g1 = new("ScreenGui")
+    g1.Name = tostring(math.random(1000,9999))
+    g1.ResetOnSpawn = false
+    g1.ZIndexBehavior = Enum.ZIndexBehavior.Sibling
+    g1.Parent = CoreGui
 
--- 原版游戏速度数值
-local defaultWalk = 16
-local defaultJump = 50
-local walkSpeedVal = 35
-local jumpPowerVal = 75
+    local g2 = new("ScreenGui")
+    g2.Name = tostring(math.random(1000,9999))
+    g2.ResetOnSpawn = false
+    g2.AlwaysOnTop = true
+    g2.Parent = CoreGui
 
-local localChar, localHum
+    -- 功能变量
+    local AimbotEnable = false
+    local LockMode = "Head"
+    local AimRange = 300
+    local PanelShow = false
+    local localChar, localHRP
 
--- 刷新角色移速跳跃
-local function RefreshChar()
-    localChar = localPlr.Character or localPlr.CharacterAdded:Wait()
-    localHum = localChar:WaitForChild("Humanoid")
-    task.wait(0.03)
-    if WalkJumpMod then
-        localHum.WalkSpeed = walkSpeedVal
-        localHum.JumpPower = jumpPowerVal
-    else
-        localHum.WalkSpeed = defaultWalk
-        localHum.JumpPower = defaultJump
+    -- 角色刷新
+    local function RefreshSelf()
+        localChar = Players.LocalPlayer.Character or Players.LocalPlayer.CharacterAdded:Wait()
+        localHRP = localChar:WaitForChild("HumanoidRootPart")
     end
-end
-RefreshChar()
+    RefreshSelf()
+    Players.LocalPlayer.CharacterAdded:Connect(RefreshSelf)
 
--- 角色重生重载属性
-localPlr.CharacterAdded:Connect(function()
-    task.wait(0.08)
-    RefreshChar()
-end)
+    -- 可拖动圆形悬浮按钮
+    local FloatBtn = new("TextButton")
+    FloatBtn.Size = UDim2.new(0, 60, 0, 60)
+    FloatBtn.Position = UDim2.new(0.84, 0, 0.3, 0)
+    FloatBtn.BackgroundColor3 = Color3.new(0.1,0.1,0.1)
+    FloatBtn.BorderSizePixel = 3
+    FloatBtn.BorderColor3 = Color3.new(0.7,0.7,0.7)
+    FloatBtn.Text = "瞄准"
+    FloatBtn.TextColor3 = Color3.new(1,1,1)
+    FloatBtn.Font = Enum.Font.SourceSansBold
+    FloatBtn.TextSize = 16
+    FloatBtn.Active = true
+    FloatBtn.ZIndex = 999
+    FloatBtn.Parent = g1
 
--- 低占用人物透视（不遍历墙体，防掉帧）
-RunService.RenderStepped:Connect(function()
-    if not PlayerESP then return end
-    for _,plr in ipairs(Players:GetPlayers()) do
-        if plr ~= localPlr and plr.Character then
-            for _,part in ipairs(plr.Character:GetDescendants()) do
-                if part:IsA("BasePart") then
-                    part.LocalTransparencyModifier = -0.9
+    local dragStart, btnOrigin, isDrag
+    FloatBtn.InputBegan:Connect(function(input)
+        if input.UserInputType == Enum.UserInputType.Touch then
+            dragStart = input.Position
+            btnOrigin = FloatBtn.Position
+            isDrag = false
+        end
+    end)
+    UserInputService.InputChanged:Connect(function(input)
+        if dragStart and input.UserInputType == Enum.UserInputType.Touch then
+            local delta = input.Position - dragStart
+            if math.abs(delta.X) > 12 or math.abs(delta.Y) > 12 then
+                isDrag = true
+                FloatBtn.Position = UDim2.new(btnOrigin.X.Scale, btnOrigin.X.Offset + delta.X, btnOrigin.Y.Scale, btnOrigin.Y.Offset + delta.Y)
+            end
+        end
+    end)
+    FloatBtn.InputEnded:Connect(function(input)
+        if input.UserInputType == Enum.UserInputType.Touch and not isDrag then
+            PanelShow = not PanelShow
+            SettingPanel.Visible = PanelShow
+        end
+        dragStart, isDrag = nil, false
+    end)
+
+    -- 设置面板
+    local SettingPanel = new("Frame")
+    SettingPanel.Size = UDim2.new(0, 260, 0, 280)
+    SettingPanel.Position = UDim2.new(0.02,0,0.2,0)
+    SettingPanel.BackgroundColor3 = Color3.new(0.08,0.08,0.08)
+    SettingPanel.BorderSizePixel = 3
+    SettingPanel.BorderColor3 = Color3.new(0.4,0.4,0.4)
+    SettingPanel.Visible = false
+    SettingPanel.Active = true
+    SettingPanel.Parent = g1
+
+    local Title = new("TextLabel")
+    Title.Size = UDim2.new(0,240,0,26)
+    Title.Position = UDim2.new(0,10,0,6)
+    Title.BackgroundTransparency = 1
+    Title.TextColor3 = Color3.new(1,1,1)
+    Title.Font = Enum.Font.SourceSansBold
+    Title.TextSize = 18
+    Title.Text = "范围瞄准设置"
+    Title.Parent = SettingPanel
+
+    -- 总开关
+    local MainSwitch = new("TextButton")
+    MainSwitch.Size = UDim2.new(0,240,0,34)
+    MainSwitch.Position = UDim2.new(0,10,0,40)
+    MainSwitch.BackgroundColor3 = Color3.new(0.2,0.2,0.2)
+    MainSwitch.TextColor3 = Color3.new(1,1,1)
+    MainSwitch.Text = "瞄准功能：关闭"
+    MainSwitch.Font = Enum.Font.SourceSans
+    MainSwitch.TextSize = 16
+    MainSwitch.Active = true
+    MainSwitch.Parent = SettingPanel
+    MainSwitch.InputEnded:Connect(function(input)
+        if input.UserInputType == Enum.UserInputType.Touch then
+            AimbotEnable = not AimbotEnable
+            MainSwitch.Text = AimbotEnable and "瞄准功能：开启" or "瞄准功能：关闭"
+            MainSwitch.BackgroundColor3 = AimbotEnable and Color3.new(0,0.4,0) or Color3.new(0.2,0.2,0.2)
+        end
+    end)
+
+    -- 头部/身体切换
+    local ModeBtn = new("TextButton")
+    ModeBtn.Size = UDim2.new(0,240,0,34)
+    ModeBtn.Position = UDim2.new(0,10,0,82)
+    ModeBtn.BackgroundColor3 = Color3.new(0.2,0.2,0.2)
+    ModeBtn.TextColor3 = Color3.new(1,1,1)
+    ModeBtn.Text = "锁定目标：头部"
+    ModeBtn.Font = Enum.Font.SourceSans
+    ModeBtn.TextSize = 16
+    ModeBtn.Active = true
+    ModeBtn.Parent = SettingPanel
+    ModeBtn.InputEnded:Connect(function(input)
+        if input.UserInputType == Enum.UserInputType.Touch then
+            LockMode = LockMode == "Head" and "Torso" or "Head"
+            ModeBtn.Text = LockMode == "Head" and "锁定目标：头部" or "锁定目标：身体"
+        end
+    end)
+
+    -- 范围输入
+    local RangeTip = new("TextLabel")
+    RangeTip.Size = UDim2.new(0,110,0,24)
+    RangeTip.Position = UDim2.new(0,10,0,126)
+    RangeTip.BackgroundTransparency = 1
+    RangeTip.TextColor3 = Color3.new(1,1,1)
+    RangeTip.TextSize = 15
+    RangeTip.Text = "锁定范围(1~500)"
+    RangeTip.Parent = SettingPanel
+
+    local RangeInput = new("TextBox")
+    RangeInput.Size = UDim2.new(0,110,0,28)
+    RangeInput.Position = UDim2.new(0,130,0,124)
+    RangeInput.Text = tostring(AimRange)
+    RangeInput.TextColor3 = Color3.new(0,0,0)
+    RangeInput.BackgroundColor3 = Color3.new(0.9,0.9,0.9)
+    RangeInput.Active = true
+    RangeInput.Parent = SettingPanel
+    RangeInput.FocusLost:Connect(function()
+        local num = tonumber(RangeInput.Text)
+        if num then
+            AimRange = math.clamp(num, 1, 500)
+            RangeInput.Text = tostring(AimRange)
+        else
+            RangeInput.Text = tostring(AimRange)
+        end
+    end)
+
+    -- 范围圆圈
+    local CircleFrame = new("Frame")
+    CircleFrame.Size = UDim2.new(0, AimRange*2, 0, AimRange*2)
+    CircleFrame.AnchorPoint = Vector2.new(0.5,0.5)
+    CircleFrame.Position = UDim2.new(0.5,0,0.5,0)
+    CircleFrame.BackgroundTransparency = 1
+    CircleFrame.BorderSizePixel = 2
+    CircleFrame.BorderColor3 = Color3.new(1,1,1)
+    CircleFrame.Visible = false
+    CircleFrame.Parent = g2
+
+    -- 瞄准红线
+    local AimLine = new("Frame")
+    AimLine.Size = UDim2.new(0,2,0,0)
+    AimLine.AnchorPoint = Vector2.new(0,0.5)
+    AimLine.BackgroundColor3 = Color3.new(1,0,0)
+    AimLine.Visible = false
+    AimLine.Parent = g2
+
+    -- 渲染循环低频率防扫描
+    RunService.RenderStepped:Connect(function()
+        if not AimbotEnable or not localHRP then
+            CircleFrame.Visible = false
+            AimLine.Visible = false
+            return
+        end
+        CircleFrame.Size = UDim2.new(0, AimRange*2, 0, AimRange*2)
+        CircleFrame.Visible = true
+        local cam = Workspace.CurrentCamera
+        local nearestTarget, nearestDist = nil, math.huge
+        for _,plr in ipairs(Players:GetPlayers()) do
+            if plr ~= Players.LocalPlayer and plr.Character then
+                local targetPart = LockMode == "Head" and plr.Character:FindFirstChild("Head") or plr.Character:FindFirstChild("Torso")
+                if not targetPart then continue end
+                local dist = (localHRP.Position - targetPart.Position).Magnitude
+                if dist < AimRange and dist < nearestDist then
+                    nearestDist = dist
+                    nearestTarget = targetPart
                 end
             end
         end
-    end
-end)
-
--- 关闭透视恢复玩家显示
-local function ResetAllPlayerVis()
-    for _,plr in ipairs(Players:GetPlayers()) do
-        if plr.Character then
-            for _,part in ipairs(plr.Character:GetDescendants()) do
-                if part:IsA("BasePart") then
-                    part.LocalTransparencyModifier = 0
-                end
-            end
+        if not nearestTarget then
+            AimLine.Visible = false
+            return
         end
-    end
-end
-
--- ===================== 可拖动悬浮小按钮（修复触摸点击无响应） =====================
-local DragBtn = Instance.new("TextButton")
-DragBtn.Size = UDim2.new(0, 55, 0, 55)
-DragBtn.Position = UDim2.new(0.86, 0, 0.32, 0)
-DragBtn.BackgroundColor3 = Color3.new(0.15,0.15,0.15)
-DragBtn.BorderSizePixel = 2
-DragBtn.BorderColor3 = Color3.new(0.6,0.6,0.6)
-DragBtn.Text = "开关"
-DragBtn.TextColor3 = Color3.new(1,1,1)
-DragBtn.Font = Enum.Font.SourceSansBold
-DragBtn.TextSize = 16
-DragBtn.Active = true
-DragBtn.Selectable = true
-DragBtn.ZIndex = 999
-DragBtn.Parent = localGui
-
-local dragStart, btnOriginPos
-local isDragging = false
-
--- 触摸按下判定（区分拖动和点击）
-DragBtn.InputBegan:Connect(function(input)
-    if input.UserInputType == Enum.UserInputType.Touch then
-        dragStart = input.Position
-        btnOriginPos = DragBtn.Position
-        isDragging = false
-    end
+        local targetScreen = cam:WorldToViewportPoint(nearestTarget.Position)
+        local screenCenter = Vector2.new(cam.ViewportSize.X/2, cam.ViewportSize.Y/2)
+        local targetVec = Vector2.new(targetScreen.X, targetScreen.Y)
+        local lineLength = (targetVec - screenCenter).Magnitude
+        AimLine.Size = UDim2.new(0, lineLength, 0, 2)
+        AimLine.Position = UDim2.new(0.5, screenCenter.X, 0.5, screenCenter.Y)
+        AimLine.Rotation = math.deg(math.atan2(targetVec.Y - screenCenter.Y, targetVec.X - screenCenter.X))
+        AimLine.Visible = true
+    end)
 end)
 
--- 拖动移动逻辑
-UserInputService.InputChanged:Connect(function(input)
-    if dragStart and input.UserInputType == Enum.UserInputType.Touch then
-        local offset = input.Position - dragStart
-        -- 偏移超过15像素判定为拖动，不触发点击
-        if math.abs(offset.X) > 15 or math.abs(offset.Y) > 15 then
-            isDragging = true
-            DragBtn.Position = UDim2.new(
-                btnOriginPos.X.Scale,
-                btnOriginPos.X.Offset + offset.X,
-                btnOriginPos.Y.Scale,
-                btnOriginPos.Y.Offset + offset.Y
-            )
-        end
-    end
-end)
-
--- 触摸松开：没拖动则切换面板显示隐藏
-DragBtn.InputEnded:Connect(function(input)
-    if input.UserInputType == Enum.UserInputType.Touch and not isDragging then
-        PanelVisible = not PanelVisible
-        MainFrame.Visible = PanelVisible
-    end
-    dragStart = nil
-    isDragging = false
-end)
-
--- ===================== 主功能面板（默认隐藏） =====================
-local MainFrame = Instance.new("Frame")
-MainFrame.Size = UDim2.new(0,240,0,220)
-MainFrame.Position = UDim2.new(0.01,0,0.25,0)
-MainFrame.BackgroundColor3 = Color3.new(0.1,0.1,0.1)
-MainFrame.BorderSizePixel = 3
-MainFrame.BorderColor3 = Color3.new(0.35,0.35,0.35)
-MainFrame.Visible = false
-MainFrame.Active = true
-MainFrame.Parent = localGui
-
-local Title = Instance.new("TextLabel")
-Title.Size = UDim2.new(0,220,0,24)
-Title.Position = UDim2.new(0,10,0,6)
-Title.BackgroundTransparency = 1
-Title.TextColor3 = Color3.new(1,1,1)
-Title.Font = Enum.Font.SourceSansBold
-Title.TextSize = 18
-Title.Text = "功能开关面板"
-Title.Parent = MainFrame
-
--- 人物透视按钮
-local ESPBtn = Instance.new("TextButton")
-ESPBtn.Size = UDim2.new(0,220,0,32)
-ESPBtn.Position = UDim2.new(0,10,0,36)
-ESPBtn.BackgroundColor3 = Color3.new(0.2,0.2,0.2)
-ESPBtn.TextColor3 = Color3.new(1,1,1)
-ESPBtn.Font = Enum.Font.SourceSans
-ESPBtn.TextSize = 16
-ESPBtn.Text = "人物透视：关闭"
-ESPBtn.Active = true
-ESPBtn.Parent = MainFrame
-
-ESPBtn.InputEnded:Connect(function(input)
-    if input.UserInputType == Enum.UserInputType.Touch then
-        PlayerESP = not PlayerESP
-        if PlayerESP then
-            ESPBtn.Text = "人物透视：开启"
-            ESPBtn.BackgroundColor3 = Color3.new(0,0.4,0)
-        else
-            ESPBtn.Text = "人物透视：关闭"
-            ESPBtn.BackgroundColor3 = Color3.new(0.2,0.2,0.2)
-            ResetAllPlayerVis()
-        end
-    end
-end)
-
--- 移速跳跃开关按钮
-local StatBtn = Instance.new("TextButton")
-StatBtn.Size = UDim2.new(0,220,0,32)
-StatBtn.Position = UDim2.new(0,10,0,74)
-StatBtn.BackgroundColor3 = Color3.new(0.2,0.2,0.2)
-StatBtn.TextColor3 = Color3.new(1,1,1)
-StatBtn.Font = Enum.Font.SourceSans
-StatBtn.TextSize = 16
-StatBtn.Text = "移速跳跃修改：关闭"
-StatBtn.Active = true
-StatBtn.Parent = MainFrame
-
-StatBtn.InputEnded:Connect(function(input)
-    if input.UserInputType == Enum.UserInputType.Touch then
-        WalkJumpMod = not WalkJumpMod
-        if WalkJumpMod then
-            StatBtn.Text = "移速跳跃修改：开启"
-            StatBtn.BackgroundColor3 = Color3.new(0,0.4,0)
-            localHum.WalkSpeed = walkSpeedVal
-            localHum.JumpPower = jumpPowerVal
-        else
-            StatBtn.Text = "移速跳跃修改：关闭"
-            StatBtn.BackgroundColor3 = Color3.new(0.2,0.2,0.2)
-            localHum.WalkSpeed = defaultWalk
-            localHum.JumpPower = defaultJump
-        end
-    end
-end)
-
--- 移速输入框
-local SpeedTip = Instance.new("TextLabel")
-SpeedTip.Size = UDim2.new(0,100,0,22)
-SpeedTip.Position = UDim2.new(0,10,0,112)
-SpeedTip.BackgroundTransparency = 1
-SpeedTip.TextColor3 = Color3.new(1,1,1)
-SpeedTip.TextSize = 15
-SpeedTip.Text = "移速(1-500)"
-SpeedTip.Parent = MainFrame
-
-local SpeedInput = Instance.new("TextBox")
-SpeedInput.Size = UDim2.new(0,110,0,26)
-SpeedInput.Position = UDim2.new(0,120,0,110)
-SpeedInput.Text = tostring(walkSpeedVal)
-SpeedInput.TextColor3 = Color3.new(0,0,0)
-SpeedInput.Active = true
-SpeedInput.Parent = MainFrame
-
-SpeedInput.FocusLost:Connect(function()
-    local num = tonumber(SpeedInput.Text)
-    if num then
-        walkSpeedVal = math.clamp(num,1,500)
-        SpeedInput.Text = tostring(walkSpeedVal)
-        if WalkJumpMod then
-            localHum.WalkSpeed = walkSpeedVal
-        end
-    else
-        SpeedInput.Text = tostring(walkSpeedVal)
-    end
-end)
-
--- 跳跃输入框
-local JumpTip = Instance.new("TextLabel")
-JumpTip.Size = UDim2.new(0,100,0,22)
-JumpTip.Position = UDim2.new(0,10,0,148)
-JumpTip.BackgroundTransparency = 1
-JumpTip.TextColor3 = Color3.new(1,1,1)
-JumpTip.TextSize = 15
-JumpTip.Text = "跳跃(1-300)"
-JumpTip.Parent = MainFrame
-
-local JumpInput = Instance.new("TextBox")
-JumpInput.Size = UDim2.new(0,110,0,26)
-JumpInput.Position = UDim2.new(0,120,0,146)
-JumpInput.Text = tostring(jumpPowerVal)
-JumpInput.TextColor3 = Color3.new(0,0,0)
-JumpInput.Active = true
-JumpInput.Parent = MainFrame
-
-JumpInput.FocusLost:Connect(function()
-    local num = tonumber(JumpInput.Text)
-    if num then
-        jumpPowerVal = math.clamp(num,1,300)
-        JumpInput.Text = tostring(jumpPowerVal)
-        if WalkJumpMod then
-            localHum.JumpPower = jumpPowerVal
-        end
-    else
-        JumpInput.Text = tostring(jumpPowerVal)
-    end
-end)
-
-print("忍者注入器触摸点击修复版加载完成")
+print("加载完成")
