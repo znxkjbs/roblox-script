@@ -1,14 +1,10 @@
-local task = task
-local delay = task.delay
-local new = Instance.new
-local getSvc = game:GetService
-
-delay(0.3, function()
-    local UserInputService = getSvc("UserInputService")
+spawn(function()
+    wait(0.3)
+    local UserInputService = game:GetService("UserInputService")
     local localPlayer = game:GetService("Players").LocalPlayer
     local coreGui = localPlayer:WaitForChild("PlayerGui")
 
-    local mainUI = new("ScreenGui")
+    local mainUI = Instance.new("ScreenGui")
     mainUI.Name = tostring(math.random(1000,9999))
     mainUI.ResetOnSpawn = false
     mainUI.ZIndexBehavior = Enum.ZIndexBehavior.Sibling
@@ -17,8 +13,7 @@ delay(0.3, function()
     local panelVisible = false
     local panelScale = 1
 
-    -- 长方形可拖动悬浮开关按钮
-    local toggleFloatBtn = new("TextButton")
+    local toggleFloatBtn = Instance.new("TextButton")
     toggleFloatBtn.Size = UDim2.new(0, 120, 0, 40)
     toggleFloatBtn.Position = UDim2.new(0.82, 0, 0.3, 0)
     toggleFloatBtn.BackgroundColor3 = Color3.new(0.15,0.15,0.15)
@@ -50,8 +45,7 @@ delay(0.3, function()
         end
     end)
 
-    -- 主面板
-    local mainPanel = new("Frame")
+    local mainPanel = Instance.new("Frame")
     mainPanel.Size = UDim2.new(0, 300, 0, 400)
     mainPanel.Position = UDim2.new(0.02,0,0.2,0)
     mainPanel.BackgroundColor3 = Color3.new(0.07,0.07,0.07)
@@ -62,7 +56,6 @@ delay(0.3, function()
     mainPanel.ZIndex = 998
     mainPanel.Parent = mainUI
 
-    -- 开关面板显示隐藏
     local function switchPanel()
         panelVisible = not panelVisible
         mainPanel.Visible = panelVisible
@@ -75,8 +68,7 @@ delay(0.3, function()
         dragStartPos, dragging = nil, false
     end)
 
-    -- 右上角放大按钮 +
-    local zoomAdd = new("TextButton")
+    local zoomAdd = Instance.new("TextButton")
     zoomAdd.Size = UDim2.new(0, 30, 0, 30)
     zoomAdd.Position = UDim2.new(1, -65, 0, 5)
     zoomAdd.BackgroundColor3 = Color3.new(0.2,0.2,0.2)
@@ -90,8 +82,7 @@ delay(0.3, function()
         mainPanel.Size = UDim2.new(0, 300 * panelScale, 0, 400 * panelScale)
     end)
 
-    -- 右上角缩小按钮 -
-    local zoomSub = new("TextButton")
+    local zoomSub = Instance.new("TextButton")
     zoomSub.Size = UDim2.new(0, 30, 0, 30)
     zoomSub.Position = UDim2.new(1, -30, 0, 5)
     zoomSub.BackgroundColor3 = Color3.new(0.2,0.2,0.2)
@@ -105,8 +96,7 @@ delay(0.3, function()
         mainPanel.Size = UDim2.new(0, 300 * panelScale, 0, 400 * panelScale)
     end)
 
-    -- 面板标题
-    local titleLabel = new("TextLabel")
+    local titleLabel = Instance.new("TextLabel")
     titleLabel.Size = UDim2.new(0,240,0,26)
     titleLabel.Position = UDim2.new(0.05,0,0,8)
     titleLabel.BackgroundTransparency = 1
@@ -116,8 +106,7 @@ delay(0.3, function()
     titleLabel.Text = "设置面板"
     titleLabel.Parent = mainPanel
 
-    -- 右下角模式切换按钮（默认通用）
-    local modeBtn = new("TextButton")
+    local modeBtn = Instance.new("TextButton")
     modeBtn.Size = UDim2.new(0, 100, 0, 32)
     modeBtn.Position = UDim2.new(0.05,0,0.75,0)
     modeBtn.BackgroundColor3 = Color3.new(0.2,0.2,0.2)
@@ -127,8 +116,7 @@ delay(0.3, function()
     modeBtn.TextSize = 14
     modeBtn.Parent = mainPanel
 
-    -- 玩家名称输入框文字提示
-    local nameTip = new("TextLabel")
+    local nameTip = Instance.new("TextLabel")
     nameTip.Size = UDim2.new(0,90,0,24)
     nameTip.Position = UDim2.new(0.4,0,0.75,0)
     nameTip.BackgroundTransparency = 1
@@ -137,8 +125,7 @@ delay(0.3, function()
     nameTip.Text = "玩家名称"
     nameTip.Parent = mainPanel
 
-    -- 玩家名字输入框
-    local nameInput = new("TextBox")
+    local nameInput = Instance.new("TextBox")
     nameInput.Size = UDim2.new(0,130,0,28)
     nameInput.Position = UDim2.new(0.4,0,0.82,0)
     nameInput.Text = ""
@@ -147,9 +134,7 @@ delay(0.3, function()
     nameInput.Active = true
     nameInput.Parent = mainPanel
 end)
-print("UI界面加载成功")
 
--- 移速控制函数（容错，角色没加载不会报错）
 local function SetWalkSpeed(speed)
     local lp = game.Players.LocalPlayer
     local char = lp.Character
@@ -160,7 +145,6 @@ local function SetWalkSpeed(speed)
     end
 end
 
--- 飞行脚本加载（加错误捕获，加载失败不崩溃整个脚本）
 local function LoadFlyV3()
     local flyUrl = "https://mirror.ghproxy.com/https://raw.githubusercontent.com/mciklw/mciklwscript/refs/heads/main/flyvthree"
     local ok, err = pcall(function()
@@ -170,3 +154,4 @@ local function LoadFlyV3()
         warn("飞行脚本加载失败："..tostring(err))
     end
 end
+print("UI界面加载成功")
