@@ -1,18 +1,9 @@
 --[[
-  脚本名称：Ohio 自动换服 + 寻找 Money Printer（带防封）
-  功能：
-    1. 每2~4秒随机间隔切换服务器（避免固定频率被检测）
-    2. 进入新服后自动搜索 "Money Printer" 或相关物品
-    3. 使用 TweenService 平滑传送到物品旁（非瞬移，降低异常行为检测）
-    4. 自动模拟点击/装备拾取
-    5. 自动销毁本地反作弊GUI界面
-    6. 所有关键操作包裹在 pcall 中，防止报错暴露脚本行为
-  作者：根据您需求定制
-  使用方式：复制到注入器执行，或上传至 Pastebin 后用 loadstring 远程加载
-  风险提示：使用第三方脚本违反 Roblox 条款，存在封号风险，请用小号测试。
+  脚本名称：Ohio 自动换服 + 精准寻找 Money Printer（跳过商店）
+  修改点：搜索条件更严格，只匹配名称同时含 "money" 和 "printer" 的对象，
+          且如果物品父级路径包含 "Shop" 或 "Store" 则自动忽略。
 --]]
 
--- ===== 0. 获取服务 =====
 local Players = game:GetService("Players")
 local TeleportService = game:GetService("TeleportService")
 local TweenService = game:GetService("TweenService")
@@ -20,16 +11,15 @@ local player = Players.LocalPlayer
 local placeId = game.PlaceId
 local currentJobId = game.JobId
 
--- ===== 配置参数（可根据需求调整） =====
 local CONFIG = {
-    MinInterval = 2,   -- 最短换服间隔（秒）
-    MaxInterval = 4,   -- 最长换服间隔（秒）
-    TweenDuration = 0.6, -- 传送动画时长（秒），越大越像真人
-    PickupDelay = 0.3, -- 拾取前的微小延迟
-    Offset = Vector3.new(1.2, 0, 0) -- 传送至目标旁的偏移量
+    MinInterval = 2,
+    MaxInterval = 4,
+    TweenDuration = 0.6,
+    PickupDelay = 0.3,
+    Offset = Vector3.new(1.2, 0, 0)
 }
 
--- ===== 1. 防封：清除本地反作弊监控界面 =====
+-- ===== 防封：清除反作弊UI =====
 local function disableLocalAntiCheat()
     local guiRoots = {player:WaitForChild("PlayerGui"), game:GetService("CoreGui")}
     for _, root in ipairs(guiRoots) do
@@ -43,21 +33,30 @@ local function disableLocalAntiCheat()
     end
 end
 
--- ===== 2. 搜索 Money Printer 并传送/拾取 =====
-local function findAndCollect()
+-- ===== 搜索函数（精确匹配 + 跳过商店区域） =====
+local function findMoneyPrinter()
     local target = nil
 
-    -- 递归搜索 workspace
     local function search(instance)
         if target then return end
+
+        -- 如果当前实例或其父级路径包含 "Shop" 或 "Store"，直接跳过（不进入其子级）
+        local parentPath = instance:GetFullName():lower()
+        if parentPath:find("shop") or parentPath:find("store") then
+            return -- 不搜索商店内部的物品
+        end
+
+        -- 检查是否为我们要找的 Money Printer
         if instance:IsA("BasePart") or instance:IsA("Model") or instance:IsA("Tool") then
             local name = instance.Name:lower()
-            if name:find("money") or name:find("printer") or name:find("cash") or 
-               name:find("machine") or name:find("atm") or name:find("print") then
+            -- 精确条件：同时包含 "money" 和 "printer"（忽略大小写）
+            if name:find("money") and name:find("printer") then
                 target = instance
                 return
             end
         end
+
+        -- 递归搜索子级
         for _, child in ipairs(instance:GetChildren()) do
             search(child)
             if target then return end
@@ -65,13 +64,18 @@ local function findAndCollect()
     end
 
     pcall(search, workspace)
+    return target
+end
 
+-- ===== 传送 + 拾取（不变） =====
+local function findAndCollect()
+    local target = findMoneyPrinter()
     if not target then
-        print("❌ 当前服务器未找到 Money Printer")
+        print("❌ 未找到真正的 Money Printer（已跳过商店）")
         return false
     end
 
-    -- 获取目标坐标
+    -- 获取坐标
     local targetPos = nil
     if target:IsA("Model") and target.PrimaryPart then
         targetPos = target.PrimaryPart.Position
@@ -87,66 +91,45 @@ local function findAndCollect()
             end
         end
     end
+    if not targetPos then return false end
 
-    if not targetPos then
-        print("❌ 无法获取目标位置")
-        return false
-    end
-
-    -- 等待角色就绪
     local character = player.Character
-    if not character or not character:FindFirstChild("HumanoidRootPart") then
-        print("❌ 角色未加载完成")
-        return false
-    end
-
+    if not character or not character:FindFirstChild("HumanoidRootPart") then return false end
     local hrp = character.HumanoidRootPart
     local targetCFrame = CFrame.new(targetPos + CONFIG.Offset)
 
-    -- ===== 防封：使用 TweenService 平滑移动（非瞬移） =====
-    local tweenInfo = TweenInfo.new(
-        CONFIG.TweenDuration,
-        Enum.EasingStyle.Linear,
-        Enum.EasingDirection.Out
-    )
+    -- 平滑移动
+    local tweenInfo = TweenInfo.new(CONFIG.TweenDuration, Enum.EasingStyle.Linear, Enum.EasingDirection.Out)
     local tween = TweenService:Create(hrp, tweenInfo, {CFrame = targetCFrame})
     tween:Play()
     tween.Completed:Wait()
-
-    -- 拾取前微小延迟
     wait(CONFIG.PickupDelay)
 
-    -- ===== 尝试自动拾取 =====
-    -- 方式1：点击 ClickDetector
+    -- 自动拾取
     local clickDetector = target:FindFirstChild("ClickDetector") or target:FindFirstChildOfClass("ClickDetector")
     if clickDetector then
         pcall(function() clickDetector:FireClick(player) end)
-        print("✅ 通过 ClickDetector 拾取")
+        print("✅ 拾取成功（Money Printer）")
         return true
     end
-
-    -- 方式2：如果是工具，自动装备
     if target:IsA("Tool") then
         local humanoid = character:FindFirstChild("Humanoid")
         if humanoid then
             pcall(function() humanoid:EquipTool(target) end)
-            print("✅ 已装备工具")
+            print("✅ 已装备 Money Printer")
             return true
         end
     end
-
-    -- 方式3：靠近后若游戏支持自动拾取，则已触发；否则提示手动
-    print("✅ 已靠近物品（若未自动拾取，请尝试按 E 或点击）")
+    print("✅ 已靠近 Money Printer（若未拾取请手动交互）")
     return true
 end
 
--- ===== 3. 换服函数 =====
+-- ===== 换服函数（不变） =====
 local function hopToNewServer()
     local servers = {}
     local success, result = pcall(function()
         return TeleportService:GetServerList(placeId)
     end)
-
     if success and result then
         for _, server in ipairs(result) do
             if server.Id ~= currentJobId and server.PlayerCount < server.MaxPlayers then
@@ -154,53 +137,30 @@ local function hopToNewServer()
             end
         end
     end
-
     if #servers > 0 then
         local target = servers[math.random(1, #servers)]
-        pcall(function()
-            TeleportService:TeleportToPlaceInstance(placeId, target.Id, player)
-        end)
+        pcall(function() TeleportService:TeleportToPlaceInstance(placeId, target.Id, player) end)
         print("🔄 跳转到新服务器: " .. target.Id)
     else
-        -- 无可用服务器则刷新当前服
-        pcall(function()
-            TeleportService:TeleportToPlaceInstance(placeId, currentJobId, player)
-        end)
-        print("🔄 无可用服，刷新当前服务器")
+        pcall(function() TeleportService:TeleportToPlaceInstance(placeId, currentJobId, player) end)
+        print("🔄 刷新当前服务器")
     end
 end
 
--- ===== 4. 主循环（带随机延时防封） =====
+-- ===== 主循环 =====
 spawn(function()
-    -- 清除反作弊UI
     disableLocalAntiCheat()
-
     while true do
-        -- 等待角色加载完成
-        repeat
-            wait(0.3)
-        until player.Character and player.Character:FindFirstChild("HumanoidRootPart")
-
-        -- 额外等待游戏UI初始化
+        repeat wait(0.3) until player.Character and player.Character:FindFirstChild("HumanoidRootPart")
         wait(0.8)
-
-        -- 执行搜索+传送+拾取（pcall 防止报错弹出）
         pcall(findAndCollect)
-
-        -- ===== 防封：随机换服间隔（2~4秒） =====
         local waitTime = math.random(CONFIG.MinInterval * 10, CONFIG.MaxInterval * 10) / 10
         print("⏳ 等待 " .. waitTime .. " 秒后换服...")
         wait(waitTime)
-
-        -- 执行换服（pcall 防止错误中断）
         pcall(hopToNewServer)
-
-        -- 更新当前 JobId
         currentJobId = game.JobId
-
-        -- 换服后短暂等待，避免连续跳转过于频繁
         wait(0.5)
     end
 end)
 
-print("🔥 《Ohio》自动换服+找Money Printer 已启动（带防封）")
+print("🔥 精准版已启动：只捡真正的 Money Printer，跳过商店物品！")
