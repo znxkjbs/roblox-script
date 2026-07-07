@@ -1,114 +1,21 @@
--- 全注入器兼容 UI 脚本（带调试输出）
-print("=== 脚本开始执行 ===")
+-- 高危远程发包脚本，极易封号，仅漏洞游戏可用
+local ReplicatedStorage = game:GetService("ReplicatedStorage")
+local Players = game:GetService("Players")
+local lp = Players.LocalPlayer
 
--- 替换spawn，兼容所有执行环境
-coroutine.wrap(function()
-    wait(0.5)
-    print("开始创建UI...")
+-- 替换成游戏内真实远程事件名称，找不到就无效
+local Remote = ReplicatedStorage:FindFirstChild("SetWalkSpeedEvent")
+if not Remote then
+    warn("未找到远程事件，远程功能失效")
+    return
+end
 
-    local Players = game:GetService("Players")
-    local UserInputService = game:GetService("UserInputService")
-    local localPlayer = Players.LocalPlayer
+-- 给指定玩家真实改速度（服务器同步，所有人可见）
+local function SetTargetPlayerSpeed(targetName, speed)
+    local targetPlr = Players:FindFirstChild(targetName)
+    if not targetPlr then return end
+    -- 发包给服务器修改他人属性
+    Remote:FireServer(targetPlr, speed)
+end
 
-    if not localPlayer then
-        warn("错误：还没加载到本地玩家，请等人物出现后再运行")
-        return
-    end
-
-    local PlayerGui = localPlayer:WaitForChild("PlayerGui", 5)
-    if not PlayerGui then
-        warn("错误：找不到PlayerGui，游戏环境异常")
-        return
-    end
-
-    -- 创建主UI
-    local ScreenGui = Instance.new("ScreenGui")
-    ScreenGui.Name = "TestUI_"..math.random(1000,9999)
-    ScreenGui.ResetOnSpawn = false
-    ScreenGui.ZIndexBehavior = Enum.ZIndexBehavior.Sibling
-    ScreenGui.Parent = PlayerGui
-
-    -- 悬浮开关按钮
-    local ToggleBtn = Instance.new("TextButton")
-    ToggleBtn.Size = UDim2.new(0, 120, 0, 45)
-    ToggleBtn.Position = UDim2.new(0.8, 0, 0.3, 0)
-    ToggleBtn.BackgroundColor3 = Color3.fromRGB(30, 30, 30)
-    ToggleBtn.BorderColor3 = Color3.fromRGB(120, 120, 120)
-    ToggleBtn.BorderSizePixel = 2
-    ToggleBtn.Text = "功能开关"
-    ToggleBtn.TextColor3 = Color3.fromRGB(255,255,255)
-    ToggleBtn.TextSize = 16
-    ToggleBtn.Font = Enum.Font.SourceSansBold
-    ToggleBtn.Active = true
-    ToggleBtn.ZIndex = 999
-    ToggleBtn.Parent = ScreenGui
-
-    print("✅ UI按钮创建成功，屏幕右侧应该出现「功能开关」按钮")
-
-    -- 面板（默认隐藏）
-    local MainPanel = Instance.new("Frame")
-    MainPanel.Size = UDim2.new(0, 300, 0, 400)
-    MainPanel.Position = UDim2.new(0.02, 0, 0.2, 0)
-    MainPanel.BackgroundColor3 = Color3.fromRGB(20,20,20)
-    MainPanel.BorderColor3 = Color3.fromRGB(80,80,80)
-    MainPanel.BorderSizePixel = 3
-    MainPanel.Visible = false
-    MainPanel.Active = true
-    MainPanel.ZIndex = 998
-    MainPanel.Parent = ScreenGui
-
-    -- 开关功能
-    local isPanelOpen = false
-    local function togglePanel()
-        isPanelOpen = not isPanelOpen
-        MainPanel.Visible = isPanelOpen
-    end
-
-    ToggleBtn.MouseButton1Click:Connect(togglePanel)
-    ToggleBtn.TouchTap:Connect(togglePanel)
-
-    -- 按钮拖拽（兼容触屏）
-    local dragToggle = false
-    local dragStart, startPos
-
-    ToggleBtn.InputBegan:Connect(function(input)
-        if input.UserInputType == Enum.UserInputType.Touch or input.UserInputType == Enum.UserInputType.MouseButton1 then
-            dragToggle = true
-            dragStart = input.Position
-            startPos = ToggleBtn.Position
-        end
-    end)
-
-    UserInputService.InputChanged:Connect(function(input)
-        if dragToggle and (input.UserInputType == Enum.UserInputType.Touch or input.UserInputType == Enum.UserInputType.MouseMovement) then
-            local delta = input.Position - dragStart
-            ToggleBtn.Position = UDim2.new(
-                startPos.X.Scale,
-                startPos.X.Offset + delta.X,
-                startPos.Y.Scale,
-                startPos.Y.Offset + delta.Y
-            )
-        end
-    end)
-
-    UserInputService.InputEnded:Connect(function(input)
-        if input.UserInputType == Enum.UserInputType.Touch or input.UserInputType == Enum.UserInputType.MouseButton1 then
-            dragToggle = false
-        end
-    end)
-
-    -- 面板标题
-    local Title = Instance.new("TextLabel")
-    Title.Size = UDim2.new(1, -20, 0, 30)
-    Title.Position = UDim2.new(0, 10, 0, 10)
-    Title.BackgroundTransparency = 1
-    Title.Text = "设置面板"
-    Title.TextColor3 = Color3.fromRGB(255,255,255)
-    Title.TextSize = 20
-    Title.Font = Enum.Font.SourceSansBold
-    Title.Parent = MainPanel
-
-    print("✅ 面板创建完成，点击按钮可展开")
-end)()
-
-print("=== 脚本加载完成 ===")
+-- 示例：SetTargetPlayerSpeed("玩家名字", 80)
