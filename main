@@ -4,12 +4,13 @@ task.spawn(function()
         local Players = game:GetService("Players")
         local UIS = game:GetService("UserInputService")
         local ReplicatedStorage = game:GetService("ReplicatedStorage")
+        local TweenService = game:GetService("TweenService")
         local lp = Players.LocalPlayer
         local targetSpeed = 16
         local currentAppliedSpeed = 16
         local hum = nil
         -- 远程配置
-        local RemoteEventName = "SetWalkSpeedEvent" -- 需替换游戏真实远程事件名
+        local RemoteEventName = "SetWalkSpeedEvent" -- 替换游戏真实远程事件名
         local targetPlayerName = ""
 
         -- 低频率缓冲锁自身速度，降低检测
@@ -59,7 +60,47 @@ task.spawn(function()
             return true
         end
 
-        -- 顶层UI容器
+        -- ==================== 美化UI工具函数 ====================
+        local function AddRound(inst, radius)
+            local corner = Instance.new("UICorner")
+            corner.CornerRadius = UDim.new(0, radius)
+            corner.Parent = inst
+            return corner
+        end
+        local function AddShadow(inst, blur, offsetX, offsetY, color, trans)
+            local shadow = Instance.new("UIShadow")
+            shadow.Blur = blur
+            shadow.Offset = Vector2.new(offsetX, offsetY)
+            shadow.Color = color
+            shadow.Transparency = trans
+            shadow.Parent = inst
+            return shadow
+        end
+        local function AddGrad(inst, col1, col2, rot)
+            local grad = Instance.new("UIGradient")
+            grad.Color = ColorSequence.new{ColorSequenceKeypoint.new(0, col1), ColorSequenceKeypoint.new(1, col2)}
+            grad.Rotation = rot
+            grad.Parent = inst
+            return grad
+        end
+        local function AddPadding(inst, left, top, right, bottom)
+            local pad = Instance.new("UIPadding")
+            pad.PaddingLeft = UDim.new(0, left)
+            pad.PaddingTop = UDim.new(0, top)
+            pad.PaddingRight = UDim.new(0, right)
+            pad.PaddingBottom = UDim.new(0, bottom)
+            pad.Parent = inst
+            return pad
+        end
+        -- 按钮hover动画
+        local function BindBtnAnim(btn)
+            local tweenIn = TweenService:Create(btn, TweenInfo.new(0.12), {Size = UDim2.new(1, -6, 1, -4)})
+            local tweenOut = TweenService:Create(btn, TweenInfo.new(0.12), {Size = UDim2.new(1, 0, 1, 0)})
+            btn.MouseEnter:Connect(function() tweenIn:Play() end)
+            btn.MouseLeave:Connect(function() tweenOut:Play() end)
+        end
+
+        -- ==================== 顶层UI容器 ====================
         local ScreenGui = Instance.new("ScreenGui")
         ScreenGui.Name = "MenuUI"
         ScreenGui.ResetOnSpawn = false
@@ -67,31 +108,36 @@ task.spawn(function()
         ScreenGui.ZIndexBehavior = Enum.ZIndexBehavior.Sibling
         ScreenGui.Parent = lp.PlayerGui
 
-        -- 可拖动悬浮开关按钮
+        -- 可拖动悬浮开关按钮（美化）
         local ToggleBtn = Instance.new("TextButton")
         ToggleBtn.Size = UDim2.new(0, 120, 0, 44)
         ToggleBtn.Position = UDim2.new(0.76, 0, 0.32, 0)
-        ToggleBtn.BackgroundColor3 = Color3.fromRGB(28, 28, 28)
-        ToggleBtn.BorderColor3 = Color3.fromRGB(110, 110, 110)
-        ToggleBtn.BorderSizePixel = 2
+        ToggleBtn.BackgroundColor3 = Color3.fromRGB(22, 22, 28)
+        ToggleBtn.BorderSizePixel = 0
         ToggleBtn.Text = "功能开关"
         ToggleBtn.TextColor3 = Color3.new(1, 1, 1)
         ToggleBtn.TextSize = 16
-        ToggleBtn.Font = Enum.Font.SourceSansBold
+        ToggleBtn.Font = Enum.Font.GothamBold
         ToggleBtn.ZIndex = 9999
         ToggleBtn.Parent = ScreenGui
+        AddRound(ToggleBtn, 10)
+        AddShadow(ToggleBtn, 6, 2, 2, Color3.new(0,0,0), 0.4)
+        AddGrad(ToggleBtn, Color3.fromRGB(40,40,55), Color3.fromRGB(22,22,28), 90)
+        BindBtnAnim(ToggleBtn)
 
-        -- 可拖动主面板
+        -- 可拖动主面板（精致大圆角+阴影）
         local MainPanel = Instance.new("Frame")
         MainPanel.Size = UDim2.new(0, 330, 0, 480)
         MainPanel.Position = UDim2.new(0.02, 0, 0.21, 0)
-        MainPanel.BackgroundColor3 = Color3.fromRGB(15, 15, 15)
-        MainPanel.BorderColor3 = Color3.fromRGB(75, 75, 75)
-        MainPanel.BorderSizePixel = 3
+        MainPanel.BackgroundColor3 = Color3.fromRGB(12, 12, 18)
+        MainPanel.BorderSizePixel = 0
         MainPanel.Visible = false
         MainPanel.Active = true
         MainPanel.ZIndex = 9998
         MainPanel.Parent = ScreenGui
+        AddRound(MainPanel, 14)
+        AddShadow(MainPanel, 12, 3, 3, Color3.new(0,0,0), 0.35)
+        AddPadding(MainPanel, 8, 8, 8, 8)
 
         local panelOpen = false
         local function SwitchPanel()
@@ -146,52 +192,62 @@ task.spawn(function()
             dragPanel = false
         end)
 
-        -- 面板标题
+        -- 面板标题（渐变文字背景）
         local TitleText = Instance.new("TextLabel")
         TitleText.Size = UDim2.new(1, -20, 0, 30)
         TitleText.Position = UDim2.new(0, 10, 0, 10)
-        TitleText.BackgroundTransparency = 1
-        TitleText.Text = "设置面板"
+        TitleText.BackgroundTransparency = 0
+        TitleText.BackgroundColor3 = Color3.fromRGB(30,30,45)
+        TitleText.Text = "移速设置面板"
         TitleText.TextColor3 = Color3.new(1, 1, 1)
         TitleText.TextSize = 20
-        TitleText.Font = Enum.Font.SourceSansBold
+        TitleText.Font = Enum.Font.GothamBold
         TitleText.Parent = MainPanel
+        AddRound(TitleText, 8)
+        AddGrad(TitleText, Color3.fromRGB(60,20,120), Color3.fromRGB(30,30,45), 45)
 
         -- 左侧通用标签按钮
         local TabCommon = Instance.new("TextButton")
         TabCommon.Size = UDim2.new(0, 60, 0, 32)
         TabCommon.Position = UDim2.new(0, 10, 0, 50)
-        TabCommon.BackgroundColor3 = Color3.fromRGB(45, 45, 45)
-        TabCommon.BorderColor3 = Color3.fromRGB(95, 95, 95)
-        TabCommon.BorderSizePixel = 1
+        TabCommon.BackgroundColor3 = Color3.fromRGB(35, 35, 48)
+        TabCommon.BorderSizePixel = 0
         TabCommon.Text = "通用"
         TabCommon.TextColor3 = Color3.new(1, 1, 1)
         TabCommon.TextSize = 15
-        TabCommon.Font = Enum.Font.SourceSansBold
+        TabCommon.Font = Enum.Font.GothamBold
         TabCommon.Parent = MainPanel
+        AddRound(TabCommon, 7)
+        BindBtnAnim(TabCommon)
 
         -- 右侧滚动功能区
         local ContentFrame = Instance.new("ScrollingFrame")
         ContentFrame.Size = UDim2.new(1, -88, 1, -96)
         ContentFrame.Position = UDim2.new(0, 78, 0, 90)
         ContentFrame.BackgroundTransparency = 1
-        ContentFrame.ScrollBarThickness = 4
+        ContentFrame.ScrollBarThickness = 5
+        ContentFrame.ScrollBarBackgroundColor3 = Color3.fromRGB(25,25,35)
+        ContentFrame.ScrollBarImageColor3 = Color3.fromRGB(90,60,180)
         ContentFrame.CanvasSize = UDim2.new(0, 0, 0, 0)
         ContentFrame.Parent = MainPanel
 
         local ListLayout = Instance.new("UIListLayout")
-        ListLayout.Padding = UDim.new(0, 10)
+        ListLayout.Padding = UDim.new(0, 12)
         ListLayout.Parent = ContentFrame
+        AddPadding(ContentFrame, 4, 4, 4, 4)
 
         -- 自身速度文字显示
         local SpeedDisplay = Instance.new("TextLabel")
         SpeedDisplay.Size = UDim2.new(1, 0, 0, 28)
-        SpeedDisplay.BackgroundTransparency = 1
+        SpeedDisplay.BackgroundTransparency = 0.2
+        SpeedDisplay.BackgroundColor3 = Color3.fromRGB(25,25,38)
         SpeedDisplay.Text = "自身移速：16"
         SpeedDisplay.TextColor3 = Color3.new(1, 1, 1)
         SpeedDisplay.TextSize = 16
         SpeedDisplay.TextXAlignment = Enum.TextXAlignment.Left
         SpeedDisplay.Parent = ContentFrame
+        AddRound(SpeedDisplay, 6)
+        AddPadding(SpeedDisplay, 10, 0, 0, 0)
 
         -- 自身速度选择按钮
         local SpeedButtons = {
@@ -205,32 +261,33 @@ task.spawn(function()
         for _, data in ipairs(SpeedButtons) do
             local Btn = Instance.new("TextButton")
             Btn.Size = UDim2.new(1, 0, 0, 36)
-            Btn.BackgroundColor3 = Color3.fromRGB(32, 32, 32)
-            Btn.BorderColor3 = Color3.fromRGB(82, 82, 82)
-            Btn.BorderSizePixel = 1
+            Btn.BackgroundColor3 = Color3.fromRGB(28, 28, 40)
+            Btn.BorderSizePixel = 0
             Btn.Text = data.Name
             Btn.TextColor3 = Color3.new(1, 1, 1)
             Btn.TextSize = 15
             Btn.Font = Enum.Font.SourceSans
             Btn.ZIndex = 9999
             Btn.Parent = ContentFrame
+            AddRound(Btn, 7)
+            BindBtnAnim(Btn)
 
             Btn.MouseButton1Click:Connect(function()
+                Btn.BackgroundColor3 = Color3.fromRGB(70,40,130)
+                task.wait(0.1)
+                Btn.BackgroundColor3 = Color3.fromRGB(28, 28, 40)
                 targetSpeed = data.Value
                 SpeedDisplay.Text = "自身移速："..tostring(targetSpeed)
                 if hum then hum.WalkSpeed = targetSpeed end
-                Btn.BackgroundColor3 = Color3.fromRGB(60,60,60)
-                task.wait(0.1)
-                Btn.BackgroundColor3 = Color3.fromRGB(32, 32, 32)
             end)
         end
 
-        -- 远程功能区域
+        -- 远程功能区域提示
         local RemoteTip = Instance.new("TextLabel")
         RemoteTip.Size = UDim2.new(1,0,0,26)
         RemoteTip.BackgroundTransparency = 1
         RemoteTip.Text = "---远程修改他人速度---"
-        RemoteTip.TextColor3 = Color3.fromRGB(220,80,80)
+        RemoteTip.TextColor3 = Color3.fromRGB(255,90,90)
         RemoteTip.TextSize = 14
         RemoteTip.TextXAlignment = Enum.TextXAlignment.Center
         RemoteTip.Parent = ContentFrame
@@ -238,13 +295,15 @@ task.spawn(function()
         -- 目标玩家名称输入框
         local TargetInput = Instance.new("TextBox")
         TargetInput.Size = UDim2.new(1,0,0,34)
-        TargetInput.BackgroundColor3 = Color3.fromRGB(25,25,25)
-        TargetInput.BorderColor3 = Color3.fromRGB(70,70,70)
+        TargetInput.BackgroundColor3 = Color3.fromRGB(20,20,32)
+        TargetInput.BorderSizePixel = 0
         TargetInput.Text = "输入目标玩家名字"
         TargetInput.TextColor3 = Color3.new(1,1,1)
         TargetInput.TextSize = 14
         TargetInput.Font = Enum.Font.SourceSans
         TargetInput.Parent = ContentFrame
+        AddRound(TargetInput, 7)
+        AddPadding(TargetInput, 10, 0, 0, 0)
         TargetInput.FocusLost:Connect(function()
             targetPlayerName = TargetInput.Text
         end)
@@ -253,19 +312,20 @@ task.spawn(function()
         local function addRemoteBtn(name, speedVal)
             local Btn = Instance.new("TextButton")
             Btn.Size = UDim2.new(1, 0, 0, 36)
-            Btn.BackgroundColor3 = Color3.fromRGB(32, 32, 32)
-            Btn.BorderColor3 = Color3.fromRGB(82, 82, 82)
-            Btn.BorderSizePixel = 1
+            Btn.BackgroundColor3 = Color3.fromRGB(28, 28, 40)
+            Btn.BorderSizePixel = 0
             Btn.Text = name
             Btn.TextColor3 = Color3.new(1, 1, 1)
             Btn.TextSize = 15
             Btn.Font = Enum.Font.SourceSans
             Btn.ZIndex = 9999
             Btn.Parent = ContentFrame
+            AddRound(Btn,7)
+            BindBtnAnim(Btn)
             Btn.MouseButton1Click:Connect(function()
-                Btn.BackgroundColor3 = Color3.fromRGB(60,60,60)
+                Btn.BackgroundColor3 = Color3.fromRGB(70,40,130)
                 task.wait(0.1)
-                Btn.BackgroundColor3 = Color3.fromRGB(32, 32, 32)
+                Btn.BackgroundColor3 = Color3.fromRGB(28, 28, 40)
                 if targetPlayerName ~= "" then
                     RemoteSetTargetSpeed(targetPlayerName, speedVal)
                 else
@@ -283,19 +343,20 @@ task.spawn(function()
         local function addFuncBtn(name,callback)
             local Btn = Instance.new("TextButton")
             Btn.Size = UDim2.new(1, 0, 0, 36)
-            Btn.BackgroundColor3 = Color3.fromRGB(32, 32, 32)
-            Btn.BorderColor3 = Color3.fromRGB(82, 82, 82)
-            Btn.BorderSizePixel = 1
+            Btn.BackgroundColor3 = Color3.fromRGB(28, 28, 40)
+            Btn.BorderSizePixel = 0
             Btn.Text = name
             Btn.TextColor3 = Color3.new(1, 1, 1)
             Btn.TextSize = 15
             Btn.Font = Enum.Font.SourceSans
             Btn.ZIndex = 9999
             Btn.Parent = ContentFrame
+            AddRound(Btn,7)
+            BindBtnAnim(Btn)
             Btn.MouseButton1Click:Connect(function()
-                Btn.BackgroundColor3 = Color3.fromRGB(60,60,60)
+                Btn.BackgroundColor3 = Color3.fromRGB(70,40,130)
                 task.wait(0.1)
-                Btn.BackgroundColor3 = Color3.fromRGB(32, 32, 32)
+                Btn.BackgroundColor3 = Color3.fromRGB(28, 28, 40)
                 callback()
             end)
         end
@@ -303,7 +364,7 @@ task.spawn(function()
         addFuncBtn("重置跳跃", function() if hum then hum.JumpPower = 7.2 end end)
 
         ContentFrame.CanvasSize = UDim2.new(0, 0, 0, ListLayout.AbsoluteContentSize.Y)
-        print("✅ 加载完成，自身加速生效，远程发包功能已集成")
+        print("✅ 精致美化UI加载完成，自身加速+远程发包功能已就绪")
     end)
     if not success then
         warn("脚本报错："..tostring(err))
