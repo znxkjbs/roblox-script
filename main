@@ -5,24 +5,29 @@ task.spawn(function()
         local ReplicatedStorage = game:GetService("ReplicatedStorage")
         local TweenService = game:GetService("TweenService")
         local lp = Players.LocalPlayer
-        local RemoteEventName = "SetWalkSpeedEvent"
         local targetPlayerName = ""
+        -- 这里必须填你游戏里真实的远程事件名称！错了远程直接失效
+        local RemoteEventName = "SetWalkSpeedEvent"
 
-        -- 远程改他人速度核心
+        -- 远程发包核心函数
         local function RemoteSetTargetSpeed(playerName, speed)
+            -- 第一步：查找远程事件
             local Remote = ReplicatedStorage:FindFirstChild(RemoteEventName)
             if not Remote then
-                warn("找不到远程事件 "..RemoteEventName)
+                warn("[远程失效] ReplicatedStorage 找不到事件："..RemoteEventName)
                 return false
             end
+            -- 第二步：查找目标玩家
             local targetPlr = Players:FindFirstChild(playerName)
             if not targetPlr then
-                warn("找不到玩家 "..playerName)
+                warn("[远程失效] 房间内不存在玩家："..playerName)
                 return false
             end
+            -- 速度安全限制
             local safeSpeed = math.clamp(speed, 1, 120)
+            -- 向服务器发送请求
             Remote:FireServer(targetPlr, safeSpeed)
-            print("发包成功 | 目标:"..playerName.." 速度:"..safeSpeed)
+            print("[发包成功] 目标玩家："..playerName.." 设置移速："..safeSpeed)
             return true
         end
 
@@ -52,7 +57,7 @@ task.spawn(function()
             btn.MouseLeave:Connect(function() t2:Play() end)
         end
 
-        -- 顶层GUI 拉满层级防止遮挡
+        -- 顶层GUI 最高层级不被遮挡
         local ScreenGui = Instance.new("ScreenGui")
         ScreenGui.Name = "RemoteSpeedMenu"
         ScreenGui.ResetOnSpawn = false
@@ -60,7 +65,7 @@ task.spawn(function()
         ScreenGui.ZIndexBehavior = Enum.ZIndexBehavior.Sibling
         ScreenGui.Parent = lp.PlayerGui
 
-        -- 悬浮开关按钮【简化输入逻辑，只用单击，删除复杂拖拽判定】
+        -- 悬浮开关按钮（无拖拽，纯点击）
         local ToggleBtn = Instance.new("TextButton")
         ToggleBtn.Size = UDim2.new(0, 120, 0, 44)
         ToggleBtn.Position = UDim2.new(0.76, 0, 0.32, 0)
@@ -93,17 +98,16 @@ task.spawn(function()
         AddShadow(MainPanel, 10, 3, 3, 0.35)
 
         local panelOpen = false
-        -- 最简点击切换函数
         local function SwitchPanel()
             panelOpen = not panelOpen
             MainPanel.Visible = panelOpen
-            print("面板状态切换:", panelOpen)
+            print("面板切换状态：", panelOpen)
         end
-        -- 只绑定单击，彻底移除拖拽冲突输入
+        -- 仅绑定点击，彻底删除拖拽代码
         ToggleBtn.MouseButton1Click:Connect(SwitchPanel)
         ToggleBtn.TouchTap:Connect(SwitchPanel)
 
-        -- 面板标题
+        -- 标题
         local Title = Instance.new("TextLabel")
         Title.Size = UDim2.new(1,-20,0,32)
         Title.Position = UDim2.new(0,10,0,10)
@@ -116,7 +120,7 @@ task.spawn(function()
         Title.Parent = MainPanel
         AddRound(Title, 8)
 
-        -- 输入框：目标玩家名
+        -- 玩家名称输入框
         local NameInput = Instance.new("TextBox")
         NameInput.Size = UDim2.new(1,-20,0,36)
         NameInput.Position = UDim2.new(0,10,0,54)
@@ -132,17 +136,16 @@ task.spawn(function()
             targetPlayerName = NameInput.Text
         end)
 
-        -- 提示文字
         local Tip = Instance.new("TextLabel")
         Tip.Size = UDim2.new(1,-20,0,24)
         Tip.Position = UDim2.new(0,10,0,98)
         Tip.BackgroundTransparency = 1
-        Tip.Text = "选择下方速度发送给目标"
+        Tip.Text = "仅支持修改其他玩家移速"
         Tip.TextColor3 = Color3.new(1,0.4,0.4)
         Tip.TextSize = 14
         Tip.Parent = MainPanel
 
-        -- 按钮生成函数
+        -- 远程速度按钮生成
         local function MakeSpeedBtn(yOffset, name, val)
             local Btn = Instance.new("TextButton")
             Btn.Size = UDim2.new(1,-20,0,38)
@@ -158,7 +161,7 @@ task.spawn(function()
             AddHover(Btn)
             Btn.MouseButton1Click:Connect(function()
                 if targetPlayerName == "" then
-                    warn("请先填写玩家名称！")
+                    warn("请先输入目标玩家名称！")
                     return
                 end
                 RemoteSetTargetSpeed(targetPlayerName, val)
@@ -168,12 +171,11 @@ task.spawn(function()
             end)
         end
 
-        -- 远程速度按钮
         MakeSpeedBtn(130, "远程速度 30", 30)
         MakeSpeedBtn(176, "远程速度 80", 80)
         MakeSpeedBtn(222, "恢复默认16", 16)
 
-        print("✅ 纯远程菜单加载完成，无本地移速，点击逻辑已简化")
+        print("✅ 脚本加载完成：无本地加速，仅远程功能")
     end)
     if not success then
         warn("脚本报错："..tostring(err))
