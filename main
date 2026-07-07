@@ -1,277 +1,206 @@
-task.spawn(function()
-    local success, err = pcall(function()
-        local Players = game:GetService("Players")
-        local UIS = game:GetService("UserInputService")
-        local lp = Players.LocalPlayer
+--[[
+  脚本名称：Ohio 自动换服 + 寻找 Money Printer（带防封）
+  功能：
+    1. 每2~4秒随机间隔切换服务器（避免固定频率被检测）
+    2. 进入新服后自动搜索 "Money Printer" 或相关物品
+    3. 使用 TweenService 平滑传送到物品旁（非瞬移，降低异常行为检测）
+    4. 自动模拟点击/装备拾取
+    5. 自动销毁本地反作弊GUI界面
+    6. 所有关键操作包裹在 pcall 中，防止报错暴露脚本行为
+  作者：根据您需求定制
+  使用方式：复制到注入器执行，或上传至 Pastebin 后用 loadstring 远程加载
+  风险提示：使用第三方脚本违反 Roblox 条款，存在封号风险，请用小号测试。
+--]]
 
-        local hum = nil
-        local targetSpeed = 16
+-- ===== 0. 获取服务 =====
+local Players = game:GetService("Players")
+local TeleportService = game:GetService("TeleportService")
+local TweenService = game:GetService("TweenService")
+local player = Players.LocalPlayer
+local placeId = game.PlaceId
+local currentJobId = game.JobId
 
-        -- 持续同步本地速度
-        local function SyncSpeed()
-            local char = lp.Character
-            if char then
-                hum = char:FindFirstChildOfClass("Humanoid")
-                if hum and hum.WalkSpeed ~= targetSpeed then
-                    hum.WalkSpeed = targetSpeed
-                end
+-- ===== 配置参数（可根据需求调整） =====
+local CONFIG = {
+    MinInterval = 2,   -- 最短换服间隔（秒）
+    MaxInterval = 4,   -- 最长换服间隔（秒）
+    TweenDuration = 0.6, -- 传送动画时长（秒），越大越像真人
+    PickupDelay = 0.3, -- 拾取前的微小延迟
+    Offset = Vector3.new(1.2, 0, 0) -- 传送至目标旁的偏移量
+}
+
+-- ===== 1. 防封：清除本地反作弊监控界面 =====
+local function disableLocalAntiCheat()
+    local guiRoots = {player:WaitForChild("PlayerGui"), game:GetService("CoreGui")}
+    for _, root in ipairs(guiRoots) do
+        for _, child in ipairs(root:GetChildren()) do
+            local name = child.Name:lower()
+            if name:find("anti") or name:find("cheat") or name:find("ban") or 
+               name:find("sec") or name:find("moder") or name:find("detect") then
+                pcall(function() child:Destroy() end)
             end
         end
+    end
+end
 
-        task.spawn(function()
-            while task.wait(0.1) do
-                SyncSpeed()
+-- ===== 2. 搜索 Money Printer 并传送/拾取 =====
+local function findAndCollect()
+    local target = nil
+
+    -- 递归搜索 workspace
+    local function search(instance)
+        if target then return end
+        if instance:IsA("BasePart") or instance:IsA("Model") or instance:IsA("Tool") then
+            local name = instance.Name:lower()
+            if name:find("money") or name:find("printer") or name:find("cash") or 
+               name:find("machine") or name:find("atm") or name:find("print") then
+                target = instance
+                return
             end
-        end)
-
-        lp.CharacterAdded:Connect(function()
-            task.wait(0.2)
-            SyncSpeed()
-        end)
-
-        -- UI 工具函数
-        local function addRound(obj, radius)
-            local corner = Instance.new("UICorner")
-            corner.CornerRadius = UDim.new(0, radius)
-            corner.Parent = obj
         end
-
-        local function addShadow(obj, blur, x, y, trans)
-            local shadow = Instance.new("UIShadow")
-            shadow.Blur = blur
-            shadow.Offset = Vector2.new(x, y)
-            shadow.Transparency = trans
-            shadow.Parent = obj
+        for _, child in ipairs(instance:GetChildren()) do
+            search(child)
+            if target then return end
         end
+    end
 
-        -- 主 GUI
-        local gui = Instance.new("ScreenGui")
-        gui.Name = "SpeedPanel"
-        gui.ResetOnSpawn = false
-        gui.DisplayOrder = 99999999
-        gui.ZIndexBehavior = Enum.ZIndexBehavior.Sibling
-        gui.IgnoreGuiInset = true
-        gui.Parent = lp.PlayerGui
+    pcall(search, workspace)
 
-        -- ==================== 可拖动的小开关（屏幕最左边） ====================
-        local ToggleBtn = Instance.new("TextButton")
-        ToggleBtn.Size = UDim2.new(0, 36, 0, 18)
-        ToggleBtn.Position = UDim2.new(0, 8, 0.35, 0)  -- 初始靠左
-        ToggleBtn.BackgroundColor3 = Color3.fromRGB(80, 60, 140)
-        ToggleBtn.BorderSizePixel = 0
-        ToggleBtn.Text = ""
-        ToggleBtn.AutoButtonColor = false
-        ToggleBtn.Active = true
-        ToggleBtn.ZIndex = 99999999
-        ToggleBtn.Parent = gui
-        addRound(ToggleBtn, 4)
-        addShadow(ToggleBtn, 3, 1, 1, 0.3)
+    if not target then
+        print("❌ 当前服务器未找到 Money Printer")
+        return false
+    end
 
-        -- 开关拖动逻辑
-        local draggingBtn = false
-        local btnStartPos, touchStartPos
-        local DRAG_THRESHOLD = 8  -- 防止误触
-
-        ToggleBtn.InputBegan:Connect(function(input)
-            if input.UserInputType == Enum.UserInputType.Touch or input.UserInputType == Enum.UserInputType.MouseButton1 then
-                draggingBtn = true
-                touchStartPos = input.Position
-                btnStartPos = ToggleBtn.Position
+    -- 获取目标坐标
+    local targetPos = nil
+    if target:IsA("Model") and target.PrimaryPart then
+        targetPos = target.PrimaryPart.Position
+    elseif target:IsA("BasePart") then
+        targetPos = target.Position
+    elseif target:IsA("Tool") and target:FindFirstChild("Handle") then
+        targetPos = target.Handle.Position
+    else
+        for _, child in ipairs(target:GetDescendants()) do
+            if child:IsA("BasePart") then
+                targetPos = child.Position
+                break
             end
-        end)
-
-        UIS.InputChanged:Connect(function(input)
-            if draggingBtn then
-                local delta = input.Position - touchStartPos
-                ToggleBtn.Position = UDim2.new(
-                    btnStartPos.X.Scale, btnStartPos.X.Offset + delta.X,
-                    btnStartPos.Y.Scale, btnStartPos.Y.Offset + delta.Y
-                )
-            end
-        end)
-
-        ToggleBtn.InputEnded:Connect(function(input)
-            if input.UserInputType == Enum.UserInputType.Touch or input.UserInputType == Enum.UserInputType.MouseButton1 then
-                local totalDelta = (input.Position - touchStartPos).Magnitude
-                if totalDelta < DRAG_THRESHOLD then
-                    -- 确认为点击，切换面板
-                    panelOpen = not panelOpen
-                    Panel.Visible = panelOpen
-                end
-                draggingBtn = false
-            end
-        end)
-
-        -- ==================== 锁定在中间的大面板 ====================
-        local Panel = Instance.new("Frame")
-        Panel.Size = UDim2.new(0, 320, 0, 260)
-        Panel.Position = UDim2.new(0.5, -160, 0.25, 0)  -- 居中固定
-        Panel.BackgroundColor3 = Color3.fromRGB(15, 15, 25)
-        Panel.BorderSizePixel = 0
-        Panel.Visible = false
-        Panel.Active = true
-        Panel.ZIndex = 99999998
-        Panel.Parent = gui
-        addRound(Panel, 10)
-        addShadow(Panel, 6, 2, 2, 0.35)
-
-        local panelOpen = false  -- 在 ToggleBtn 的 InputEnded 中切换
-
-        -- ==================== 面板内容 ====================
-        -- 标题栏
-        local TitleBar = Instance.new("Frame")
-        TitleBar.Size = UDim2.new(1, 0, 0, 30)
-        TitleBar.BackgroundColor3 = Color3.fromRGB(30, 25, 45)
-        TitleBar.BorderSizePixel = 0
-        TitleBar.Parent = Panel
-        addRound(TitleBar, 8)
-
-        local Title = Instance.new("TextLabel")
-        Title.Size = UDim2.new(1, 0, 1, 0)
-        Title.BackgroundTransparency = 1
-        Title.Text = "本地移速调节"
-        Title.TextColor3 = Color3.new(1, 1, 1)
-        Title.TextSize = 16
-        Title.Font = Enum.Font.GothamBold
-        Title.Parent = TitleBar
-
-        -- 左侧“通用”标签
-        local TabFrame = Instance.new("Frame")
-        TabFrame.Size = UDim2.new(0, 80, 1, -30)
-        TabFrame.Position = UDim2.new(0, 0, 0, 30)
-        TabFrame.BackgroundColor3 = Color3.fromRGB(20, 20, 32)
-        TabFrame.BorderSizePixel = 0
-        TabFrame.Parent = Panel
-
-        local TabBtn = Instance.new("TextButton")
-        TabBtn.Size = UDim2.new(1, -8, 0, 34)
-        TabBtn.Position = UDim2.new(0, 4, 0, 12)
-        TabBtn.BackgroundColor3 = Color3.fromRGB(50, 35, 80)
-        TabBtn.BorderSizePixel = 0
-        TabBtn.Text = "通用"
-        TabBtn.TextColor3 = Color3.new(1, 1, 1)
-        TabBtn.TextSize = 14
-        TabBtn.Font = Enum.Font.SourceSansBold
-        TabBtn.AutoButtonColor = false
-        TabBtn.Parent = TabFrame
-        addRound(TabBtn, 6)
-
-        -- 右侧内容区
-        local Content = Instance.new("Frame")
-        Content.Size = UDim2.new(1, -84, 1, -30)
-        Content.Position = UDim2.new(0, 84, 0, 30)
-        Content.BackgroundTransparency = 1
-        Content.Parent = Panel
-
-        -- 当前速度显示
-        local SpeedLabel = Instance.new("TextLabel")
-        SpeedLabel.Size = UDim2.new(1, -20, 0, 24)
-        SpeedLabel.Position = UDim2.new(0, 10, 0, 24)
-        SpeedLabel.BackgroundTransparency = 1
-        SpeedLabel.Text = "当前速度: 16"
-        SpeedLabel.TextColor3 = Color3.fromRGB(200, 200, 255)
-        SpeedLabel.TextSize = 14
-        SpeedLabel.TextXAlignment = Enum.TextXAlignment.Center
-        SpeedLabel.Font = Enum.Font.SourceSansBold
-        SpeedLabel.Parent = Content
-
-        -- 滑动条背景
-        local SliderBg = Instance.new("Frame")
-        SliderBg.Size = UDim2.new(1, -20, 0, 28)
-        SliderBg.Position = UDim2.new(0, 10, 0, 80)
-        SliderBg.BackgroundColor3 = Color3.fromRGB(25, 25, 38)
-        SliderBg.BorderSizePixel = 0
-        SliderBg.Parent = Content
-        addRound(SliderBg, 14)
-
-        -- 已填充区域
-        local Fill = Instance.new("Frame")
-        Fill.Size = UDim2.new(0, 20, 1, 0)
-        Fill.BackgroundColor3 = Color3.fromRGB(120, 80, 200)
-        Fill.BorderSizePixel = 0
-        Fill.Parent = SliderBg
-        addRound(Fill, 14)
-
-        -- 拖动圆点
-        local Knob = Instance.new("TextButton")
-        Knob.Size = UDim2.new(0, 22, 0, 22)
-        Knob.Position = UDim2.new(1, -11, 0.5, -11)
-        Knob.BackgroundColor3 = Color3.new(1, 1, 1)
-        Knob.BorderSizePixel = 0
-        Knob.Text = ""
-        Knob.AutoButtonColor = false
-        Knob.Parent = Fill
-        addRound(Knob, 11)
-
-        -- 最小/最大值标签
-        local MinText = Instance.new("TextLabel")
-        MinText.Size = UDim2.new(0, 30, 0, 16)
-        MinText.Position = UDim2.new(0, 10, 0, 62)
-        MinText.BackgroundTransparency = 1
-        MinText.Text = "1"
-        MinText.TextColor3 = Color3.fromRGB(150, 150, 150)
-        MinText.TextSize = 12
-        MinText.Font = Enum.Font.SourceSans
-        MinText.TextXAlignment = Enum.TextXAlignment.Left
-        MinText.Parent = Content
-
-        local MaxText = Instance.new("TextLabel")
-        MaxText.Size = UDim2.new(0, 30, 0, 16)
-        MaxText.Position = UDim2.new(1, -40, 0, 62)
-        MaxText.BackgroundTransparency = 1
-        MaxText.Text = "500"
-        MaxText.TextColor3 = Color3.fromRGB(150, 150, 150)
-        MaxText.TextSize = 12
-        MaxText.Font = Enum.Font.SourceSans
-        MaxText.TextXAlignment = Enum.TextXAlignment.Right
-        MaxText.Parent = Content
-
-        -- ========== 滑动条交互 ==========
-        local isDraggingSlider = false
-
-        local function updateSlider(value)
-            value = math.clamp(math.floor(value), 1, 500)
-            targetSpeed = value
-            SpeedLabel.Text = "当前速度: " .. value
-            if hum then
-                hum.WalkSpeed = value
-            end
-            local fraction = (value - 1) / 499
-            Fill.Size = UDim2.new(fraction, 0, 1, 0)
         end
+    end
 
-        SliderBg.InputBegan:Connect(function(input)
-            if input.UserInputType == Enum.UserInputType.Touch or input.UserInputType == Enum.UserInputType.MouseButton1 then
-                isDraggingSlider = true
-                local relX = math.clamp(input.Position.X - SliderBg.AbsolutePosition.X, 0, SliderBg.AbsoluteSize.X)
-                local fraction = relX / SliderBg.AbsoluteSize.X
-                local newSpeed = math.floor(1 + fraction * 499)
-                updateSlider(newSpeed)
-            end
-        end)
+    if not targetPos then
+        print("❌ 无法获取目标位置")
+        return false
+    end
 
-        UIS.InputChanged:Connect(function(input)
-            if isDraggingSlider and (input.UserInputType == Enum.UserInputType.MouseMovement or input.UserInputType == Enum.UserInputType.Touch) then
-                local relX = math.clamp(input.Position.X - SliderBg.AbsolutePosition.X, 0, SliderBg.AbsoluteSize.X)
-                local fraction = relX / SliderBg.AbsoluteSize.X
-                local newSpeed = math.floor(1 + fraction * 499)
-                updateSlider(newSpeed)
-            end
-        end)
+    -- 等待角色就绪
+    local character = player.Character
+    if not character or not character:FindFirstChild("HumanoidRootPart") then
+        print("❌ 角色未加载完成")
+        return false
+    end
 
-        UIS.InputEnded:Connect(function(input)
-            if input.UserInputType == Enum.UserInputType.Touch or input.UserInputType == Enum.UserInputType.MouseButton1 then
-                isDraggingSlider = false
-            end
-        end)
+    local hrp = character.HumanoidRootPart
+    local targetCFrame = CFrame.new(targetPos + CONFIG.Offset)
 
-        -- 初始值
-        updateSlider(16)
+    -- ===== 防封：使用 TweenService 平滑移动（非瞬移） =====
+    local tweenInfo = TweenInfo.new(
+        CONFIG.TweenDuration,
+        Enum.EasingStyle.Linear,
+        Enum.EasingDirection.Out
+    )
+    local tween = TweenService:Create(hrp, tweenInfo, {CFrame = targetCFrame})
+    tween:Play()
+    tween.Completed:Wait()
 
-        print("✅ 速度面板已加载：左侧小开关可拖动，面板居中固定，滑动调节1-500")
+    -- 拾取前微小延迟
+    wait(CONFIG.PickupDelay)
+
+    -- ===== 尝试自动拾取 =====
+    -- 方式1：点击 ClickDetector
+    local clickDetector = target:FindFirstChild("ClickDetector") or target:FindFirstChildOfClass("ClickDetector")
+    if clickDetector then
+        pcall(function() clickDetector:FireClick(player) end)
+        print("✅ 通过 ClickDetector 拾取")
+        return true
+    end
+
+    -- 方式2：如果是工具，自动装备
+    if target:IsA("Tool") then
+        local humanoid = character:FindFirstChild("Humanoid")
+        if humanoid then
+            pcall(function() humanoid:EquipTool(target) end)
+            print("✅ 已装备工具")
+            return true
+        end
+    end
+
+    -- 方式3：靠近后若游戏支持自动拾取，则已触发；否则提示手动
+    print("✅ 已靠近物品（若未自动拾取，请尝试按 E 或点击）")
+    return true
+end
+
+-- ===== 3. 换服函数 =====
+local function hopToNewServer()
+    local servers = {}
+    local success, result = pcall(function()
+        return TeleportService:GetServerList(placeId)
     end)
 
-    if not success then
-        warn("❌ 脚本运行错误：" .. tostring(err))
+    if success and result then
+        for _, server in ipairs(result) do
+            if server.Id ~= currentJobId and server.PlayerCount < server.MaxPlayers then
+                table.insert(servers, server)
+            end
+        end
+    end
+
+    if #servers > 0 then
+        local target = servers[math.random(1, #servers)]
+        pcall(function()
+            TeleportService:TeleportToPlaceInstance(placeId, target.Id, player)
+        end)
+        print("🔄 跳转到新服务器: " .. target.Id)
+    else
+        -- 无可用服务器则刷新当前服
+        pcall(function()
+            TeleportService:TeleportToPlaceInstance(placeId, currentJobId, player)
+        end)
+        print("🔄 无可用服，刷新当前服务器")
+    end
+end
+
+-- ===== 4. 主循环（带随机延时防封） =====
+spawn(function()
+    -- 清除反作弊UI
+    disableLocalAntiCheat()
+
+    while true do
+        -- 等待角色加载完成
+        repeat
+            wait(0.3)
+        until player.Character and player.Character:FindFirstChild("HumanoidRootPart")
+
+        -- 额外等待游戏UI初始化
+        wait(0.8)
+
+        -- 执行搜索+传送+拾取（pcall 防止报错弹出）
+        pcall(findAndCollect)
+
+        -- ===== 防封：随机换服间隔（2~4秒） =====
+        local waitTime = math.random(CONFIG.MinInterval * 10, CONFIG.MaxInterval * 10) / 10
+        print("⏳ 等待 " .. waitTime .. " 秒后换服...")
+        wait(waitTime)
+
+        -- 执行换服（pcall 防止错误中断）
+        pcall(hopToNewServer)
+
+        -- 更新当前 JobId
+        currentJobId = game.JobId
+
+        -- 换服后短暂等待，避免连续跳转过于频繁
+        wait(0.5)
     end
 end)
+
+print("🔥 《Ohio》自动换服+找Money Printer 已启动（带防封）")
