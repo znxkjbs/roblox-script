@@ -6,28 +6,25 @@ task.spawn(function()
         local TweenService = game:GetService("TweenService")
         local lp = Players.LocalPlayer
         local targetPlayerName = ""
-        -- 这里必须填你游戏里真实的远程事件名称！错了远程直接失效
+        -- 【重要】改成游戏ReplicatedStorage里真实远程事件名称
         local RemoteEventName = "SetWalkSpeedEvent"
 
-        -- 远程发包核心函数
+        -- 远程发包函数（加WaitForChild防止加载不全找不到事件）
         local function RemoteSetTargetSpeed(playerName, speed)
-            -- 第一步：查找远程事件
-            local Remote = ReplicatedStorage:FindFirstChild(RemoteEventName)
+            print("开始查找远程事件: "..RemoteEventName)
+            local Remote = ReplicatedStorage:WaitForChild(RemoteEventName, 3)
             if not Remote then
-                warn("[远程失效] ReplicatedStorage 找不到事件："..RemoteEventName)
+                warn("[远程失败] 3秒内未找到远程事件："..RemoteEventName)
                 return false
             end
-            -- 第二步：查找目标玩家
             local targetPlr = Players:FindFirstChild(playerName)
             if not targetPlr then
-                warn("[远程失效] 房间内不存在玩家："..playerName)
+                warn("[远程失败] 不存在玩家："..playerName)
                 return false
             end
-            -- 速度安全限制
             local safeSpeed = math.clamp(speed, 1, 120)
-            -- 向服务器发送请求
             Remote:FireServer(targetPlr, safeSpeed)
-            print("[发包成功] 目标玩家："..playerName.." 设置移速："..safeSpeed)
+            print("✅ 发包成功 | 目标:"..playerName.." 速度:"..safeSpeed)
             return true
         end
 
@@ -57,15 +54,15 @@ task.spawn(function()
             btn.MouseLeave:Connect(function() t2:Play() end)
         end
 
-        -- 顶层GUI 最高层级不被遮挡
+        -- 最高层级GUI，不会被游戏UI遮挡
         local ScreenGui = Instance.new("ScreenGui")
-        ScreenGui.Name = "RemoteSpeedMenu"
+        ScreenGui.Name = "OnlyRemoteMenu"
         ScreenGui.ResetOnSpawn = false
-        ScreenGui.DisplayOrder = 9999999
+        ScreenGui.DisplayOrder = 99999999
         ScreenGui.ZIndexBehavior = Enum.ZIndexBehavior.Sibling
         ScreenGui.Parent = lp.PlayerGui
 
-        -- 悬浮开关按钮（无拖拽，纯点击）
+        -- 悬浮开关按钮（只用Activated，全平台通用）
         local ToggleBtn = Instance.new("TextButton")
         ToggleBtn.Size = UDim2.new(0, 120, 0, 44)
         ToggleBtn.Position = UDim2.new(0.76, 0, 0.32, 0)
@@ -75,7 +72,7 @@ task.spawn(function()
         ToggleBtn.TextColor3 = Color3.new(1,1,1)
         ToggleBtn.TextSize = 16
         ToggleBtn.Font = Enum.Font.GothamBold
-        ToggleBtn.ZIndex = 9999999
+        ToggleBtn.ZIndex = 99999999
         ToggleBtn.Active = true
         ToggleBtn.Selectable = true
         ToggleBtn.Parent = ScreenGui
@@ -92,20 +89,20 @@ task.spawn(function()
         MainPanel.BorderSizePixel = 0
         MainPanel.Visible = false
         MainPanel.Active = true
-        MainPanel.ZIndex = 9999998
+        MainPanel.ZIndex = 99999998
         MainPanel.Parent = ScreenGui
         AddRound(MainPanel, 14)
         AddShadow(MainPanel, 10, 3, 3, 0.35)
 
         local panelOpen = false
+        -- 切换面板函数
         local function SwitchPanel()
             panelOpen = not panelOpen
             MainPanel.Visible = panelOpen
-            print("面板切换状态：", panelOpen)
+            print("【按钮触发】面板状态：", panelOpen)
         end
-        -- 仅绑定点击，彻底删除拖拽代码
-        ToggleBtn.MouseButton1Click:Connect(SwitchPanel)
-        ToggleBtn.TouchTap:Connect(SwitchPanel)
+        -- 核心修复：使用Activated替代两套冲突点击事件，手机电脑通用
+        ToggleBtn.Activated:Connect(SwitchPanel)
 
         -- 标题
         local Title = Instance.new("TextLabel")
@@ -126,7 +123,7 @@ task.spawn(function()
         NameInput.Position = UDim2.new(0,10,0,54)
         NameInput.BackgroundColor3 = Color3.new(0.1,0.1,0.16)
         NameInput.BorderSizePixel = 0
-        NameInput.Text = "输入目标玩家名字"
+        NameInput.Text = "输入目标玩家完整ID"
         NameInput.TextColor3 = Color3.new(1,1,1)
         NameInput.TextSize = 15
         NameInput.Font = Enum.Font.SourceSans
@@ -134,13 +131,14 @@ task.spawn(function()
         AddRound(NameInput, 7)
         NameInput.FocusLost:Connect(function()
             targetPlayerName = NameInput.Text
+            print("已保存目标玩家名："..targetPlayerName)
         end)
 
         local Tip = Instance.new("TextLabel")
         Tip.Size = UDim2.new(1,-20,0,24)
         Tip.Position = UDim2.new(0,10,0,98)
         Tip.BackgroundTransparency = 1
-        Tip.Text = "仅支持修改其他玩家移速"
+        Tip.Text = "仅修改其他玩家，无本地加速功能"
         Tip.TextColor3 = Color3.new(1,0.4,0.4)
         Tip.TextSize = 14
         Tip.Parent = MainPanel
@@ -159,9 +157,9 @@ task.spawn(function()
             Btn.Parent = MainPanel
             AddRound(Btn,7)
             AddHover(Btn)
-            Btn.MouseButton1Click:Connect(function()
+            Btn.Activated:Connect(function()
                 if targetPlayerName == "" then
-                    warn("请先输入目标玩家名称！")
+                    warn("请先填写目标玩家ID！")
                     return
                 end
                 RemoteSetTargetSpeed(targetPlayerName, val)
@@ -175,9 +173,9 @@ task.spawn(function()
         MakeSpeedBtn(176, "远程速度 80", 80)
         MakeSpeedBtn(222, "恢复默认16", 16)
 
-        print("✅ 脚本加载完成：无本地加速，仅远程功能")
+        print("✅ 纯净远程菜单加载完成：无任何本地移速/跳跃代码")
     end)
     if not success then
-        warn("脚本报错："..tostring(err))
+        warn("❌ 脚本报错："..tostring(err))
     end
 end)
