@@ -1,10 +1,9 @@
 --[[
-  严苛版：只认明确命名为 "MoneyPrinter" 或 "Money Printer" 的物品
-  并排除所有黑名单词和商店路径
-  换服间隔可调（默认1秒）
-  输出找到的物品名称和路径，方便你调整
+  严苛版：只捡名字同时含 "money" 和 "printer" 的物品
+  强制过滤商店/Health/Mobile/Play等路径
+  1秒换服（带随机抖动）
+  全自动循环
 --]]
-
 local Players = game:GetService("Players")
 local TeleportService = game:GetService("TeleportService")
 local TweenService = game:GetService("TweenService")
@@ -12,19 +11,16 @@ local player = Players.LocalPlayer
 local placeId = game.PlaceId
 local currentJobId = game.JobId
 
--- ===== 配置（可自行修改） =====
 local CONFIG = {
-    MinInterval = 0.9,   -- 换服最小间隔（秒）
-    MaxInterval = 1.1,   -- 换服最大间隔（秒）
+    MinInterval = 0.9,
+    MaxInterval = 1.1,
     TweenDuration = 0.4,
     PickupDelay = 0.1,
     Offset = Vector3.new(1.2, 0, 0)
 }
 
--- 黑名单词汇（名称中含这些词的绝不捡）
-local BLACKLIST = {"health", "mobile", "play", "menu", "shop", "store", "cash", "atm", "vending"}
+local PATH_BLACKLIST = {"shop", "store", "menu", "health", "mobile", "play", "character", "backpack"}
 
--- ===== 防封：清除反作弊UI =====
 local function disableLocalAntiCheat()
     local guiRoots = {player:WaitForChild("PlayerGui"), game:GetService("CoreGui")}
     for _, root in ipairs(guiRoots) do
@@ -38,78 +34,40 @@ local function disableLocalAntiCheat()
     end
 end
 
--- ===== 严格搜索函数 =====
 local function findMoneyPrinter()
     local target = nil
     local function search(instance)
         if target then return end
-
-        -- 1. 跳过商店路径（任何父级含 shop/store/menu）
         local fullPath = instance:GetFullName():lower()
-        if fullPath:find("shop") or fullPath:find("store") or fullPath:find("menu") then
-            return  -- 整个分支跳过
+        for _, word in ipairs(PATH_BLACKLIST) do
+            if fullPath:find(word) then return end
         end
-
-        -- 2. 跳过玩家角色和背包
-        if fullPath:find("character") or fullPath:find("backpack") then
-            return
-        end
-
-        -- 3. 只检查特定类型
         if instance:IsA("BasePart") or instance:IsA("Model") or instance:IsA("Tool") then
             local name = instance.Name:lower()
-
-            -- 4. 必须包含 "printer"（核心）
-            if name:find("printer") then
-                -- 5. 黑名单过滤
-                local blocked = false
-                for _, word in ipairs(BLACKLIST) do
-                    if name:find(word) then
-                        blocked = true
-                        break
-                    end
-                end
-                if blocked then 
-                    print("⛔ 跳过黑名单物品:", instance.Name)
-                    return 
-                end
-
-                -- 6. 必须有交互能力（ClickDetector 或 Tool）
+            if name:find("money") and name:find("printer") then
                 local hasClick = instance:FindFirstChild("ClickDetector") or instance:FindFirstChildOfClass("ClickDetector")
-                local isTool = instance:IsA("Tool")
-                if hasClick or isTool then
+                if hasClick or instance:IsA("Tool") then
                     target = instance
-                    print("🎯 找到目标:", instance:GetFullName(), " 名称:", instance.Name)
+                    print("🎯 找到:", instance:GetFullName())
                     return
                 end
             end
         end
-
-        -- 递归子级
         for _, child in ipairs(instance:GetChildren()) do
             search(child)
             if target then return end
         end
     end
-
     pcall(search, workspace)
     return target
 end
 
--- ===== 传送+拾取 =====
 local function findAndCollect()
     local target = findMoneyPrinter()
     if not target then
-        print("❌ 未找到有效的 Money Printer（已过滤所有杂项）")
+        print("❌ 未找到 Money Printer")
         return false
     end
-
-    -- 再次确认目标仍在且有效
-    if not target.Parent then
-        print("⚠️ 目标已消失")
-        return false
-    end
-
     local targetPos = nil
     if target:IsA("Model") and target.PrimaryPart then
         targetPos = target.PrimaryPart.Position
@@ -126,39 +84,33 @@ local function findAndCollect()
         end
     end
     if not targetPos then return false end
-
     local character = player.Character
     if not character or not character:FindFirstChild("HumanoidRootPart") then return false end
     local hrp = character.HumanoidRootPart
     local targetCFrame = CFrame.new(targetPos + CONFIG.Offset)
-
-    -- 平滑移动
     local tweenInfo = TweenInfo.new(CONFIG.TweenDuration, Enum.EasingStyle.Linear, Enum.EasingDirection.Out)
     local tween = TweenService:Create(hrp, tweenInfo, {CFrame = targetCFrame})
     tween:Play()
     tween.Completed:Wait()
     wait(CONFIG.PickupDelay)
-
-    -- 自动拾取
     local clickDetector = target:FindFirstChild("ClickDetector") or target:FindFirstChildOfClass("ClickDetector")
     if clickDetector then
         pcall(function() clickDetector:FireClick(player) end)
-        print("✅ 拾取成功:", target.Name)
+        print("✅ 拾取成功")
         return true
     end
     if target:IsA("Tool") then
         local humanoid = character:FindFirstChild("Humanoid")
         if humanoid then
             pcall(function() humanoid:EquipTool(target) end)
-            print("✅ 装备成功:", target.Name)
+            print("✅ 装备成功")
             return true
         end
     end
-    print("✅ 已靠近:", target.Name, "（请手动交互）")
+    print("✅ 已靠近")
     return true
 end
 
--- ===== 换服 =====
 local function hopToNewServer()
     local servers = {}
     local success, result = pcall(function()
@@ -181,7 +133,6 @@ local function hopToNewServer()
     end
 end
 
--- ===== 主循环 =====
 spawn(function()
     disableLocalAntiCheat()
     while true do
@@ -189,7 +140,7 @@ spawn(function()
         wait(0.5)
         pcall(findAndCollect)
         local waitTime = math.random(CONFIG.MinInterval * 100, CONFIG.MaxInterval * 100) / 100
-        print("⏳ 等待 " .. waitTime .. " 秒后换服...")
+        print("⏳ 等待 " .. waitTime .. " 秒换服")
         wait(waitTime)
         pcall(hopToNewServer)
         currentJobId = game.JobId
@@ -197,5 +148,4 @@ spawn(function()
     end
 end)
 
-print("🔥 严苛版已启动！只会捡真正含 'printer' 且不在黑名单的物品。")
-print("📌 如果误捡，请把控制台打印的 '找到目标' 信息发给我。")
+print("🔥 远程加载版已启动 | 只捡同时含 money 和 printer 的物品，跳过商店杂项")
