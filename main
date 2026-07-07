@@ -1,230 +1,277 @@
 task.spawn(function()
     local success, err = pcall(function()
         local Players = game:GetService("Players")
-        local TweenService = game:GetService("TweenService")
         local UIS = game:GetService("UserInputService")
         local lp = Players.LocalPlayer
 
-        local targetSpeed = 16
-        local currentSpeed = 16
         local hum = nil
+        local targetSpeed = 16
 
-        -- 持续更新自身速度（平滑过渡）
-        local function UpdateSpeed()
+        -- 持续同步本地速度
+        local function SyncSpeed()
             local char = lp.Character
-            if not char then return end
-            hum = char:FindFirstChildOfClass("Humanoid")
-            if not hum then return end
-
-            if math.abs(currentSpeed - targetSpeed) > 1 then
-                currentSpeed = currentSpeed + (targetSpeed - currentSpeed) * 0.25
-            else
-                currentSpeed = targetSpeed
+            if char then
+                hum = char:FindFirstChildOfClass("Humanoid")
+                if hum and hum.WalkSpeed ~= targetSpeed then
+                    hum.WalkSpeed = targetSpeed
+                end
             end
-            hum.WalkSpeed = math.floor(currentSpeed)
         end
 
-        -- 循环刷新
         task.spawn(function()
-            while task.wait(0.05) do
-                UpdateSpeed()
+            while task.wait(0.1) do
+                SyncSpeed()
             end
         end)
 
-        -- 角色重生时同步
         lp.CharacterAdded:Connect(function()
-            task.wait(0.3)
-            UpdateSpeed()
+            task.wait(0.2)
+            SyncSpeed()
         end)
 
-        -- ===== UI 工具 =====
-        local function AddRound(obj, r)
-            Instance.new("UICorner", obj).CornerRadius = UDim.new(0, r)
-        end
-        local function AddGrad(obj, c1, c2, rot)
-            local g = Instance.new("UIGradient", obj)
-            g.Color = ColorSequence.new{ColorSequenceKeypoint.new(0,c1), ColorSequenceKeypoint.new(1,c2)}
-            g.Rotation = rot
-        end
-        local function AddHover(btn)
-            local t1 = TweenService:Create(btn, TweenInfo.new(0.1), {Size = UDim2.new(1,-4,1,-4)})
-            local t2 = TweenService:Create(btn, TweenInfo.new(0.1), {Size = UDim2.new(1,0,1,0)})
-            btn.MouseEnter:Connect(function() t1:Play() end)
-            btn.MouseLeave:Connect(function() t2:Play() end)
+        -- UI 工具函数
+        local function addRound(obj, radius)
+            local corner = Instance.new("UICorner")
+            corner.CornerRadius = UDim.new(0, radius)
+            corner.Parent = obj
         end
 
-        -- ===== ScreenGui =====
-        local ScreenGui = Instance.new("ScreenGui")
-        ScreenGui.Name = "LocalSpeedUI"
-        ScreenGui.ResetOnSpawn = false
-        ScreenGui.DisplayOrder = 99999999
-        ScreenGui.ZIndexBehavior = Enum.ZIndexBehavior.Sibling
-        ScreenGui.IgnoreGuiInset = true
-        ScreenGui.Parent = lp.PlayerGui
+        local function addShadow(obj, blur, x, y, trans)
+            local shadow = Instance.new("UIShadow")
+            shadow.Blur = blur
+            shadow.Offset = Vector2.new(x, y)
+            shadow.Transparency = trans
+            shadow.Parent = obj
+        end
 
-        -- 悬浮开关按钮（可拖动）
+        -- 主 GUI
+        local gui = Instance.new("ScreenGui")
+        gui.Name = "SpeedPanel"
+        gui.ResetOnSpawn = false
+        gui.DisplayOrder = 99999999
+        gui.ZIndexBehavior = Enum.ZIndexBehavior.Sibling
+        gui.IgnoreGuiInset = true
+        gui.Parent = lp.PlayerGui
+
+        -- ==================== 可拖动的小开关（屏幕最左边） ====================
         local ToggleBtn = Instance.new("TextButton")
-        ToggleBtn.Size = UDim2.new(0, 120, 0, 40)
-        ToggleBtn.Position = UDim2.new(0.55, 0, 0.30, 0)
-        ToggleBtn.BackgroundColor3 = Color3.fromRGB(30,30,45)
+        ToggleBtn.Size = UDim2.new(0, 36, 0, 18)
+        ToggleBtn.Position = UDim2.new(0, 8, 0.35, 0)  -- 初始靠左
+        ToggleBtn.BackgroundColor3 = Color3.fromRGB(80, 60, 140)
         ToggleBtn.BorderSizePixel = 0
-        ToggleBtn.Text = "速度面板"
-        ToggleBtn.TextColor3 = Color3.new(1,1,1)
-        ToggleBtn.TextSize = 16
-        ToggleBtn.Font = Enum.Font.GothamBold
-        ToggleBtn.ZIndex = 99999999
-        ToggleBtn.Active = true
-        ToggleBtn.Selectable = true
+        ToggleBtn.Text = ""
         ToggleBtn.AutoButtonColor = false
-        ToggleBtn.Parent = ScreenGui
-        AddRound(ToggleBtn, 10)
-        AddGrad(ToggleBtn, Color3.fromRGB(60,40,100), Color3.fromRGB(30,30,45), 90)
-        AddHover(ToggleBtn)
+        ToggleBtn.Active = true
+        ToggleBtn.ZIndex = 99999999
+        ToggleBtn.Parent = gui
+        addRound(ToggleBtn, 4)
+        addShadow(ToggleBtn, 3, 1, 1, 0.3)
 
-        -- 主面板
-        local MainPanel = Instance.new("Frame")
-        MainPanel.Size = UDim2.new(0, 220, 0, 300)
-        MainPanel.Position = UDim2.new(0.03, 0, 0.21, 0)
-        MainPanel.BackgroundColor3 = Color3.fromRGB(12,12,20)
-        MainPanel.BorderSizePixel = 0
-        MainPanel.Visible = false
-        MainPanel.Active = true
-        MainPanel.ZIndex = 99999998
-        MainPanel.Parent = ScreenGui
-        AddRound(MainPanel, 14)
-
-        -- 开关控制
-        local panelOpen = false
-        ToggleBtn.Activated:Connect(function()
-            panelOpen = not panelOpen
-            MainPanel.Visible = panelOpen
-        end)
-
-        -- 面板拖动逻辑（修复点击冲突）
-        local dragToggle = false
-        local toggleStartPos, toggleTouchStart
-        local DRAG_THRESHOLD = 30
+        -- 开关拖动逻辑
+        local draggingBtn = false
+        local btnStartPos, touchStartPos
+        local DRAG_THRESHOLD = 8  -- 防止误触
 
         ToggleBtn.InputBegan:Connect(function(input)
             if input.UserInputType == Enum.UserInputType.Touch or input.UserInputType == Enum.UserInputType.MouseButton1 then
-                dragToggle = true
-                toggleTouchStart = input.Position
-                toggleStartPos = ToggleBtn.Position
+                draggingBtn = true
+                touchStartPos = input.Position
+                btnStartPos = ToggleBtn.Position
             end
         end)
 
         UIS.InputChanged:Connect(function(input)
-            if dragToggle then
-                local delta = input.Position - toggleTouchStart
+            if draggingBtn then
+                local delta = input.Position - touchStartPos
                 ToggleBtn.Position = UDim2.new(
-                    toggleStartPos.X.Scale, toggleStartPos.X.Offset + delta.X,
-                    toggleStartPos.Y.Scale, toggleStartPos.Y.Offset + delta.Y
+                    btnStartPos.X.Scale, btnStartPos.X.Offset + delta.X,
+                    btnStartPos.Y.Scale, btnStartPos.Y.Offset + delta.Y
                 )
             end
         end)
 
         ToggleBtn.InputEnded:Connect(function(input)
             if input.UserInputType == Enum.UserInputType.Touch or input.UserInputType == Enum.UserInputType.MouseButton1 then
-                dragToggle = false
-                local totalDelta = (input.Position - toggleTouchStart).Magnitude
+                local totalDelta = (input.Position - touchStartPos).Magnitude
                 if totalDelta < DRAG_THRESHOLD then
-                    -- 短按才切换面板
+                    -- 确认为点击，切换面板
                     panelOpen = not panelOpen
-                    MainPanel.Visible = panelOpen
+                    Panel.Visible = panelOpen
                 end
+                draggingBtn = false
             end
         end)
 
-        -- 面板拖动
-        local dragPanel = false
-        local panelStartPos, panelTouchStart
-        MainPanel.InputBegan:Connect(function(input)
-            if input.UserInputType == Enum.UserInputType.Touch or input.UserInputType == Enum.UserInputType.MouseButton1 then
-                dragPanel = true
-                panelTouchStart = input.Position
-                panelStartPos = MainPanel.Position
-            end
-        end)
-        UIS.InputChanged:Connect(function(input)
-            if dragPanel then
-                local delta = input.Position - panelTouchStart
-                MainPanel.Position = UDim2.new(
-                    panelStartPos.X.Scale, panelStartPos.X.Offset + delta.X,
-                    panelStartPos.Y.Scale, panelStartPos.Y.Offset + delta.Y
-                )
-            end
-        end)
-        UIS.InputEnded:Connect(function()
-            dragPanel = false
-        end)
+        -- ==================== 锁定在中间的大面板 ====================
+        local Panel = Instance.new("Frame")
+        Panel.Size = UDim2.new(0, 320, 0, 260)
+        Panel.Position = UDim2.new(0.5, -160, 0.25, 0)  -- 居中固定
+        Panel.BackgroundColor3 = Color3.fromRGB(15, 15, 25)
+        Panel.BorderSizePixel = 0
+        Panel.Visible = false
+        Panel.Active = true
+        Panel.ZIndex = 99999998
+        Panel.Parent = gui
+        addRound(Panel, 10)
+        addShadow(Panel, 6, 2, 2, 0.35)
 
-        -- 标题
+        local panelOpen = false  -- 在 ToggleBtn 的 InputEnded 中切换
+
+        -- ==================== 面板内容 ====================
+        -- 标题栏
+        local TitleBar = Instance.new("Frame")
+        TitleBar.Size = UDim2.new(1, 0, 0, 30)
+        TitleBar.BackgroundColor3 = Color3.fromRGB(30, 25, 45)
+        TitleBar.BorderSizePixel = 0
+        TitleBar.Parent = Panel
+        addRound(TitleBar, 8)
+
         local Title = Instance.new("TextLabel")
-        Title.Size = UDim2.new(1,-20,0,28)
-        Title.Position = UDim2.new(0,10,0,8)
-        Title.BackgroundColor3 = Color3.fromRGB(50,20,90)
-        Title.Text = "本地移速"
-        Title.TextColor3 = Color3.new(1,1,1)
-        Title.TextSize = 18
+        Title.Size = UDim2.new(1, 0, 1, 0)
+        Title.BackgroundTransparency = 1
+        Title.Text = "本地移速调节"
+        Title.TextColor3 = Color3.new(1, 1, 1)
+        Title.TextSize = 16
         Title.Font = Enum.Font.GothamBold
-        Title.Parent = MainPanel
-        AddRound(Title, 8)
+        Title.Parent = TitleBar
+
+        -- 左侧“通用”标签
+        local TabFrame = Instance.new("Frame")
+        TabFrame.Size = UDim2.new(0, 80, 1, -30)
+        TabFrame.Position = UDim2.new(0, 0, 0, 30)
+        TabFrame.BackgroundColor3 = Color3.fromRGB(20, 20, 32)
+        TabFrame.BorderSizePixel = 0
+        TabFrame.Parent = Panel
+
+        local TabBtn = Instance.new("TextButton")
+        TabBtn.Size = UDim2.new(1, -8, 0, 34)
+        TabBtn.Position = UDim2.new(0, 4, 0, 12)
+        TabBtn.BackgroundColor3 = Color3.fromRGB(50, 35, 80)
+        TabBtn.BorderSizePixel = 0
+        TabBtn.Text = "通用"
+        TabBtn.TextColor3 = Color3.new(1, 1, 1)
+        TabBtn.TextSize = 14
+        TabBtn.Font = Enum.Font.SourceSansBold
+        TabBtn.AutoButtonColor = false
+        TabBtn.Parent = TabFrame
+        addRound(TabBtn, 6)
+
+        -- 右侧内容区
+        local Content = Instance.new("Frame")
+        Content.Size = UDim2.new(1, -84, 1, -30)
+        Content.Position = UDim2.new(0, 84, 0, 30)
+        Content.BackgroundTransparency = 1
+        Content.Parent = Panel
 
         -- 当前速度显示
         local SpeedLabel = Instance.new("TextLabel")
-        SpeedLabel.Size = UDim2.new(1,-20,0,24)
-        SpeedLabel.Position = UDim2.new(0,10,0,44)
+        SpeedLabel.Size = UDim2.new(1, -20, 0, 24)
+        SpeedLabel.Position = UDim2.new(0, 10, 0, 24)
         SpeedLabel.BackgroundTransparency = 1
-        SpeedLabel.Text = "当前: 16"
-        SpeedLabel.TextColor3 = Color3.fromRGB(200,200,255)
+        SpeedLabel.Text = "当前速度: 16"
+        SpeedLabel.TextColor3 = Color3.fromRGB(200, 200, 255)
         SpeedLabel.TextSize = 14
+        SpeedLabel.TextXAlignment = Enum.TextXAlignment.Center
         SpeedLabel.Font = Enum.Font.SourceSansBold
-        SpeedLabel.Parent = MainPanel
+        SpeedLabel.Parent = Content
 
-        -- 速度按钮列表
-        local speeds = {
-            {name = "速度 1",   value = 1},
-            {name = "速度 16",  value = 16},
-            {name = "速度 32",  value = 32},
-            {name = "速度 64",  value = 64},
-            {name = "速度 100", value = 100},
-            {name = "速度 150", value = 150},
-        }
+        -- 滑动条背景
+        local SliderBg = Instance.new("Frame")
+        SliderBg.Size = UDim2.new(1, -20, 0, 28)
+        SliderBg.Position = UDim2.new(0, 10, 0, 80)
+        SliderBg.BackgroundColor3 = Color3.fromRGB(25, 25, 38)
+        SliderBg.BorderSizePixel = 0
+        SliderBg.Parent = Content
+        addRound(SliderBg, 14)
 
-        for i, data in ipairs(speeds) do
-            local yPos = 76 + (i-1)*38
-            local Btn = Instance.new("TextButton")
-            Btn.Size = UDim2.new(1,-20,0,34)
-            Btn.Position = UDim2.new(0,10,0,yPos)
-            Btn.BackgroundColor3 = Color3.fromRGB(30,30,45)
-            Btn.BorderSizePixel = 0
-            Btn.Text = data.name
-            Btn.TextColor3 = Color3.new(1,1,1)
-            Btn.TextSize = 14
-            Btn.Font = Enum.Font.SourceSans
-            Btn.AutoButtonColor = false
-            Btn.Parent = MainPanel
-            AddRound(Btn,7)
-            AddHover(Btn)
+        -- 已填充区域
+        local Fill = Instance.new("Frame")
+        Fill.Size = UDim2.new(0, 20, 1, 0)
+        Fill.BackgroundColor3 = Color3.fromRGB(120, 80, 200)
+        Fill.BorderSizePixel = 0
+        Fill.Parent = SliderBg
+        addRound(Fill, 14)
 
-            Btn.Activated:Connect(function()
-                targetSpeed = data.value
-                SpeedLabel.Text = "当前: "..data.value
-                -- 立即应用一次
-                if hum then
-                    hum.WalkSpeed = data.value
-                    currentSpeed = data.value
-                end
-                -- 点击反馈变色
-                Btn.BackgroundColor3 = Color3.fromRGB(80,30,150)
-                task.wait(0.1)
-                Btn.BackgroundColor3 = Color3.fromRGB(30,30,45)
-            end)
+        -- 拖动圆点
+        local Knob = Instance.new("TextButton")
+        Knob.Size = UDim2.new(0, 22, 0, 22)
+        Knob.Position = UDim2.new(1, -11, 0.5, -11)
+        Knob.BackgroundColor3 = Color3.new(1, 1, 1)
+        Knob.BorderSizePixel = 0
+        Knob.Text = ""
+        Knob.AutoButtonColor = false
+        Knob.Parent = Fill
+        addRound(Knob, 11)
+
+        -- 最小/最大值标签
+        local MinText = Instance.new("TextLabel")
+        MinText.Size = UDim2.new(0, 30, 0, 16)
+        MinText.Position = UDim2.new(0, 10, 0, 62)
+        MinText.BackgroundTransparency = 1
+        MinText.Text = "1"
+        MinText.TextColor3 = Color3.fromRGB(150, 150, 150)
+        MinText.TextSize = 12
+        MinText.Font = Enum.Font.SourceSans
+        MinText.TextXAlignment = Enum.TextXAlignment.Left
+        MinText.Parent = Content
+
+        local MaxText = Instance.new("TextLabel")
+        MaxText.Size = UDim2.new(0, 30, 0, 16)
+        MaxText.Position = UDim2.new(1, -40, 0, 62)
+        MaxText.BackgroundTransparency = 1
+        MaxText.Text = "500"
+        MaxText.TextColor3 = Color3.fromRGB(150, 150, 150)
+        MaxText.TextSize = 12
+        MaxText.Font = Enum.Font.SourceSans
+        MaxText.TextXAlignment = Enum.TextXAlignment.Right
+        MaxText.Parent = Content
+
+        -- ========== 滑动条交互 ==========
+        local isDraggingSlider = false
+
+        local function updateSlider(value)
+            value = math.clamp(math.floor(value), 1, 500)
+            targetSpeed = value
+            SpeedLabel.Text = "当前速度: " .. value
+            if hum then
+                hum.WalkSpeed = value
+            end
+            local fraction = (value - 1) / 499
+            Fill.Size = UDim2.new(fraction, 0, 1, 0)
         end
 
-        print("✅ 本地速度面板加载完成，点击悬浮按钮打开")
+        SliderBg.InputBegan:Connect(function(input)
+            if input.UserInputType == Enum.UserInputType.Touch or input.UserInputType == Enum.UserInputType.MouseButton1 then
+                isDraggingSlider = true
+                local relX = math.clamp(input.Position.X - SliderBg.AbsolutePosition.X, 0, SliderBg.AbsoluteSize.X)
+                local fraction = relX / SliderBg.AbsoluteSize.X
+                local newSpeed = math.floor(1 + fraction * 499)
+                updateSlider(newSpeed)
+            end
+        end)
+
+        UIS.InputChanged:Connect(function(input)
+            if isDraggingSlider and (input.UserInputType == Enum.UserInputType.MouseMovement or input.UserInputType == Enum.UserInputType.Touch) then
+                local relX = math.clamp(input.Position.X - SliderBg.AbsolutePosition.X, 0, SliderBg.AbsoluteSize.X)
+                local fraction = relX / SliderBg.AbsoluteSize.X
+                local newSpeed = math.floor(1 + fraction * 499)
+                updateSlider(newSpeed)
+            end
+        end)
+
+        UIS.InputEnded:Connect(function(input)
+            if input.UserInputType == Enum.UserInputType.Touch or input.UserInputType == Enum.UserInputType.MouseButton1 then
+                isDraggingSlider = false
+            end
+        end)
+
+        -- 初始值
+        updateSlider(16)
+
+        print("✅ 速度面板已加载：左侧小开关可拖动，面板居中固定，滑动调节1-500")
     end)
+
     if not success then
-        warn("❌ 脚本错误："..tostring(err))
+        warn("❌ 脚本运行错误：" .. tostring(err))
     end
 end)
