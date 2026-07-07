@@ -104,7 +104,7 @@ task.spawn(function()
         local ScreenGui = Instance.new("ScreenGui")
         ScreenGui.Name = "MenuUI"
         ScreenGui.ResetOnSpawn = false
-        ScreenGui.DisplayOrder = 999999 -- 拉高层级，防止游戏UI遮挡
+        ScreenGui.DisplayOrder = 999999
         ScreenGui.ZIndexBehavior = Enum.ZIndexBehavior.Sibling
         ScreenGui.Parent = lp.PlayerGui
 
@@ -119,7 +119,7 @@ task.spawn(function()
         ToggleBtn.TextSize = 16
         ToggleBtn.Font = Enum.Font.GothamBold
         ToggleBtn.ZIndex = 999999
-        ToggleBtn.Active = true -- 强制开启交互
+        ToggleBtn.Active = true
         ToggleBtn.Parent = ScreenGui
         AddRound(ToggleBtn, 10)
         AddShadow(ToggleBtn, 6, 2, 2, Color3.new(0,0,0), 0.4)
@@ -144,40 +144,44 @@ task.spawn(function()
         local function SwitchPanel()
             panelOpen = not panelOpen
             MainPanel.Visible = panelOpen
-            print("面板切换：", panelOpen) -- 调试打印，判断函数是否触发
+            print("面板切换：", panelOpen) -- 调试用，可删除
         end
 
-        -- 悬浮按钮拖拽逻辑【修复：提高拖拽阈值，减少误触】
+        -- ========== 修复后的拖拽点击逻辑 ==========
         local dragBtn = false
-        local btnStartPos, touchStart, dragDistance
-        local DRAG_THRESHOLD = 35 -- 原来22改成35，不容易误判定拖拽
+        local btnStartPos, touchStartPos
+        local DRAG_THRESHOLD = 35  -- 移动超过35像素才算拖拽
+
         ToggleBtn.InputBegan:Connect(function(input)
             if input.UserInputType == Enum.UserInputType.Touch or input.UserInputType == Enum.UserInputType.MouseButton1 then
                 dragBtn = true
-                dragDistance = 0
-                touchStart = input.Position
+                touchStartPos = input.Position
                 btnStartPos = ToggleBtn.Position
             end
         end)
+
         UIS.InputChanged:Connect(function(input)
             if dragBtn then
-                local delta = input.Position - touchStart
-                dragDistance += math.abs(delta.X) + math.abs(delta.Y)
-                ToggleBtn.Position = UDim2.new(btnStartPos.X.Scale, btnStartPos.X.Offset + delta.X, btnStartPos.Y.Scale, btnStartPos.Y.Offset + delta.Y)
+                local delta = input.Position - touchStartPos
+                ToggleBtn.Position = UDim2.new(
+                    btnStartPos.X.Scale, btnStartPos.X.Offset + delta.X,
+                    btnStartPos.Y.Scale, btnStartPos.Y.Offset + delta.Y
+                )
             end
         end)
+
         ToggleBtn.InputEnded:Connect(function(input)
             if input.UserInputType == Enum.UserInputType.Touch or input.UserInputType == Enum.UserInputType.MouseButton1 then
                 dragBtn = false
-                -- 只有拖动距离小于阈值才触发点击
-                if dragDistance < DRAG_THRESHOLD then
+                -- 结束时计算总位移距离，低于阈值认为是点击
+                local totalDelta = (input.Position - touchStartPos).Magnitude
+                if totalDelta < DRAG_THRESHOLD then
                     SwitchPanel()
                 end
             end
         end)
-        -- 移除重复的MouseButton1Click、TouchTap绑定，避免冲突
 
-        -- 主面板整体拖动
+        -- ========== 主面板拖动（保留） ==========
         local dragPanel = false
         local panelStartPos, panelTouchStart
         MainPanel.InputBegan:Connect(function(input)
@@ -190,7 +194,10 @@ task.spawn(function()
         UIS.InputChanged:Connect(function(input)
             if dragPanel then
                 local delta = input.Position - panelTouchStart
-                MainPanel.Position = UDim2.new(panelStartPos.X.Scale, panelStartPos.X.Offset + delta.X, panelStartPos.Y.Scale, panelStartPos.Y.Offset + delta.Y)
+                MainPanel.Position = UDim2.new(
+                    panelStartPos.X.Scale, panelStartPos.X.Offset + delta.X,
+                    panelStartPos.Y.Scale, panelStartPos.Y.Offset + delta.Y
+                )
             end
         end)
         UIS.InputEnded:Connect(function()
@@ -240,6 +247,11 @@ task.spawn(function()
         ListLayout.Padding = UDim.new(0, 12)
         ListLayout.Parent = ContentFrame
         AddPadding(ContentFrame, 4, 4, 4, 4)
+
+        -- 自动更新滚动区域尺寸（修复之前只设一次的问题）
+        ListLayout:GetPropertyChangedSignal("AbsoluteContentSize"):Connect(function()
+            ContentFrame.CanvasSize = UDim2.new(0, 0, 0, ListLayout.AbsoluteContentSize.Y + 10)
+        end)
 
         -- 自身速度文字显示
         local SpeedDisplay = Instance.new("TextLabel")
@@ -368,8 +380,7 @@ task.spawn(function()
         addFuncBtn("高跳", function() if hum then hum.JumpPower = 55 end end)
         addFuncBtn("重置跳跃", function() if hum then hum.JumpPower = 7.2 end end)
 
-        ContentFrame.CanvasSize = UDim2.new(0, 0, 0, ListLayout.AbsoluteContentSize.Y)
-        print("✅ 修复版UI加载完成，点击冲突已解决")
+        print("✅ 修复版UI加载完成，点击/拖拽不再冲突，滚动区域自动适配")
     end)
     if not success then
         warn("脚本报错："..tostring(err))
