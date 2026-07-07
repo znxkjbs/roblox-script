@@ -6,63 +6,55 @@ task.spawn(function()
         local lp = Players.LocalPlayer
         local targetPlayerName = ""
 
-        -- ⚠️ 改成游戏里真实的远程事件名（大小写必须一致）
-        local RemoteEventName = "SetWalkSpeedEvent"
+        local RemoteEventName = "SetWalkSpeedEvent" -- 改成真实名字
 
-        -- 尝试获取远程事件（不阻塞）
+        -- 播放测试声音（确保点击有效）
+        local function PlayClickSound()
+            pcall(function()
+                local sound = Instance.new("Sound")
+                sound.SoundId = "rbxassetid://9120386436" -- 叮咚音效
+                sound.Volume = 0.8
+                sound.Parent = lp.PlayerGui
+                sound:Play()
+                game.Debris:AddItem(sound, 1)
+            end)
+        end
+
+        -- 获取远程事件
         local function GetRemote()
             local remote = ReplicatedStorage:FindFirstChild(RemoteEventName)
-            if remote and remote:IsA("RemoteEvent") then
-                return remote
-            end
+            if remote and remote:IsA("RemoteEvent") then return remote end
             return nil
         end
 
-        -- 远程发包（带详细日志）
+        -- 远程发包
         local function RemoteSetTargetSpeed(playerName, speed)
             local Remote = GetRemote()
             if not Remote then
-                warn("[远程失败] 未找到远程事件：" .. RemoteEventName)
+                warn("❌ 远程事件不存在："..RemoteEventName)
                 return false
             end
             local targetPlr = Players:FindFirstChild(playerName)
             if not targetPlr then
-                warn("[远程失败] 玩家不在房间：" .. playerName)
+                warn("❌ 玩家不在房间："..playerName)
                 return false
             end
             local safeSpeed = math.clamp(speed, 1, 120)
-            print("📤 发送远程 | 事件：" .. Remote.Name .. " | 目标：" .. targetPlr.Name .. " | 速度：" .. safeSpeed)
-
-            -- 多数游戏要求发送玩家名字，而不是玩家对象，这里发送名字
-            local fireOk, fireErr = pcall(function()
+            print("📤 发包："..targetPlr.Name.." 速度="..safeSpeed)
+            pcall(function()
                 Remote:FireServer(targetPlr.Name, safeSpeed)
             end)
-            if not fireOk then
-                warn("[发包异常] " .. tostring(fireErr))
-                return false
-            end
-            print("✅ 发包完成，等待服务端处理")
             return true
         end
 
-        -- ============ UI 工具函数 ============
+        -- ===== UI工具 =====
         local function AddRound(obj, r)
-            local c = Instance.new("UICorner")
-            c.CornerRadius = UDim.new(0, r)
-            c.Parent = obj
-        end
-        local function AddShadow(obj, blur, x, y, trans)
-            local s = Instance.new("UIShadow")
-            s.Blur = blur
-            s.Offset = Vector2.new(x, y)
-            s.Transparency = trans
-            s.Parent = obj
+            Instance.new("UICorner", obj).CornerRadius = UDim.new(0, r)
         end
         local function AddGrad(obj, c1, c2, rot)
-            local g = Instance.new("UIGradient")
+            local g = Instance.new("UIGradient", obj)
             g.Color = ColorSequence.new{ColorSequenceKeypoint.new(0,c1), ColorSequenceKeypoint.new(1,c2)}
             g.Rotation = rot
-            g.Parent = obj
         end
         local function AddHover(btn)
             local t1 = TweenService:Create(btn, TweenInfo.new(0.1), {Size = UDim2.new(1,-4,1,-4)})
@@ -71,94 +63,100 @@ task.spawn(function()
             btn.MouseLeave:Connect(function() t2:Play() end)
         end
 
-        -- ============ UI 创建（无论远程是否存在都会加载） ============
+        -- ===== ScreenGui (确保最高层级，手机可点) =====
         local ScreenGui = Instance.new("ScreenGui")
-        ScreenGui.Name = "RemoteOnlyGUI"
+        ScreenGui.Name = "DebugRemoteGUI"
         ScreenGui.ResetOnSpawn = false
         ScreenGui.DisplayOrder = 99999999
         ScreenGui.ZIndexBehavior = Enum.ZIndexBehavior.Sibling
         ScreenGui.IgnoreGuiInset = true
         ScreenGui.Parent = lp.PlayerGui
 
-        -- 悬浮开关
+        -- ===== 开关按钮 (大一点，防误触) =====
         local ToggleBtn = Instance.new("TextButton")
-        ToggleBtn.Size = UDim2.new(0, 120, 0, 44)
-        ToggleBtn.Position = UDim2.new(0.6, 0, 0.32, 0)
-        ToggleBtn.BackgroundColor3 = Color3.new(0.12,0.12,0.16)
+        ToggleBtn.Size = UDim2.new(0, 140, 0, 50)
+        ToggleBtn.Position = UDim2.new(0.65, 0, 0.28, 0)
+        ToggleBtn.BackgroundColor3 = Color3.fromRGB(30,30,50)
         ToggleBtn.BorderSizePixel = 0
-        ToggleBtn.Text = "功能开关"
+        ToggleBtn.Text = "🔘 功能开关"
         ToggleBtn.TextColor3 = Color3.new(1,1,1)
-        ToggleBtn.TextSize = 16
+        ToggleBtn.TextSize = 17
         ToggleBtn.Font = Enum.Font.GothamBold
         ToggleBtn.ZIndex = 99999999
         ToggleBtn.Active = true
         ToggleBtn.Selectable = true
+        ToggleBtn.AutoButtonColor = false  -- 关闭自动变色，我们自己控制
         ToggleBtn.Parent = ScreenGui
-        AddRound(ToggleBtn, 10)
-        AddShadow(ToggleBtn, 5, 2, 2, 0.4)
-        AddGrad(ToggleBtn, Color3.new(0.18,0.18,0.28), Color3.new(0.1,0.1,0.14), 90)
+        AddRound(ToggleBtn, 12)
+        AddGrad(ToggleBtn, Color3.fromRGB(60,40,100), Color3.fromRGB(30,30,50), 90)
         AddHover(ToggleBtn)
 
         -- 主面板
         local MainPanel = Instance.new("Frame")
         MainPanel.Size = UDim2.new(0, 300, 0, 360)
-        MainPanel.Position = UDim2.new(0.02, 0, 0.21, 0)
-        MainPanel.BackgroundColor3 = Color3.new(0.06,0.06,0.09)
+        MainPanel.Position = UDim2.new(0.03, 0, 0.21, 0)
+        MainPanel.BackgroundColor3 = Color3.fromRGB(15,15,25)
         MainPanel.BorderSizePixel = 0
         MainPanel.Visible = false
         MainPanel.Active = true
         MainPanel.ZIndex = 99999998
         MainPanel.Parent = ScreenGui
         AddRound(MainPanel, 14)
-        AddShadow(MainPanel, 10, 3, 3, 0.35)
 
         local panelOpen = false
-        local function SwitchPanel()
+        -- 开关点击事件：强制反馈
+        ToggleBtn.Activated:Connect(function()
+            PlayClickSound()
+            print("🔔 【开关被点击！】")
+
+            -- 视觉闪烁反馈（瞬间变色证明点击生效）
+            ToggleBtn.BackgroundColor3 = Color3.fromRGB(100,100,255)
+            task.wait(0.1)
+            ToggleBtn.BackgroundColor3 = Color3.fromRGB(30,30,50)
+
+            -- 切换面板
             panelOpen = not panelOpen
             MainPanel.Visible = panelOpen
-            print("【开关】面板：" .. (panelOpen and "打开" or "关闭"))
-        end
-        ToggleBtn.Activated:Connect(SwitchPanel)
+            print("📋 面板现在："..(panelOpen and "打开" or "关闭"))
+        end)
 
+        -- ===== 面板内容 =====
         -- 标题
         local Title = Instance.new("TextLabel")
         Title.Size = UDim2.new(1,-20,0,32)
         Title.Position = UDim2.new(0,10,0,10)
-        Title.BackgroundTransparency = 0
-        Title.BackgroundColor3 = Color3.new(0.2,0.08,0.35)
-        Title.Text = "远程玩家速度修改"
+        Title.BackgroundColor3 = Color3.fromRGB(50,20,90)
+        Title.Text = "远程速度修改"
         Title.TextColor3 = Color3.new(1,1,1)
         Title.TextSize = 19
         Title.Font = Enum.Font.GothamBold
         Title.Parent = MainPanel
         AddRound(Title, 8)
 
-        -- 远程事件状态提示
+        -- 远程事件状态 (动态)
         local StatusLabel = Instance.new("TextLabel")
-        StatusLabel.Size = UDim2.new(1,-20,0,20)
-        StatusLabel.Position = UDim2.new(0,10,0,46)
+        StatusLabel.Size = UDim2.new(1,-20,0,22)
+        StatusLabel.Position = UDim2.new(0,10,0,48)
         StatusLabel.BackgroundTransparency = 1
-        StatusLabel.TextColor3 = Color3.new(1,1,1)
         StatusLabel.TextSize = 13
-        StatusLabel.Font = Enum.Font.SourceSans
+        StatusLabel.Font = Enum.Font.SourceSansBold
         StatusLabel.Parent = MainPanel
-        -- 实时更新状态
         local function UpdateStatus()
             if GetRemote() then
-                StatusLabel.Text = "🔗 远程事件已就绪"
-                StatusLabel.TextColor3 = Color3.new(0.4,1,0.4)
+                StatusLabel.Text = "✔ 远程事件已就绪: "..RemoteEventName
+                StatusLabel.TextColor3 = Color3.fromRGB(100,255,100)
             else
-                StatusLabel.Text = "⚠ 远程事件未找到：" .. RemoteEventName
-                StatusLabel.TextColor3 = Color3.new(1,0.5,0.5)
+                StatusLabel.Text = "✘ 远程事件未找到: "..RemoteEventName
+                StatusLabel.TextColor3 = Color3.fromRGB(255,100,100)
             end
         end
         UpdateStatus()
 
-        -- 玩家名输入框
+        -- 输入框
         local NameInput = Instance.new("TextBox")
         NameInput.Size = UDim2.new(1,-20,0,36)
-        NameInput.Position = UDim2.new(0,10,0,70)
-        NameInput.BackgroundColor3 = Color3.new(0.1,0.1,0.16)
+        NameInput.Position = UDim2.new(0,10,0,78)
+        NameInput.BackgroundColor3 = Color3.fromRGB(30,30,45)
         NameInput.BorderSizePixel = 0
         NameInput.Text = "输入目标玩家完整ID"
         NameInput.TextColor3 = Color3.new(1,1,1)
@@ -168,54 +166,59 @@ task.spawn(function()
         AddRound(NameInput, 7)
         NameInput.FocusLost:Connect(function()
             targetPlayerName = NameInput.Text
-            print("已保存目标玩家：" .. targetPlayerName)
+            print("📝 目标玩家名已保存："..targetPlayerName)
         end)
 
+        -- 提示
         local Tip = Instance.new("TextLabel")
-        Tip.Size = UDim2.new(1,-20,0,24)
-        Tip.Position = UDim2.new(0,10,0,114)
+        Tip.Size = UDim2.new(1,-20,0,22)
+        Tip.Position = UDim2.new(0,10,0,120)
         Tip.BackgroundTransparency = 1
-        Tip.Text = "仅修改其他玩家，无本地加速功能"
-        Tip.TextColor3 = Color3.new(1,0.4,0.4)
+        Tip.Text = "仅修改其他玩家，无本地加速"
+        Tip.TextColor3 = Color3.fromRGB(255,150,150)
         Tip.TextSize = 14
         Tip.Parent = MainPanel
 
-        -- 远程速度按钮生成
+        -- 远程速度按钮生成 (自带点击反馈)
         local function MakeSpeedBtn(yOffset, name, val)
             local Btn = Instance.new("TextButton")
             Btn.Size = UDim2.new(1,-20,0,38)
             Btn.Position = UDim2.new(0,10,0,yOffset)
-            Btn.BackgroundColor3 = Color3.new(0.12,0.12,0.18)
+            Btn.BackgroundColor3 = Color3.fromRGB(30,30,45)
             Btn.BorderSizePixel = 0
             Btn.Text = name
             Btn.TextColor3 = Color3.new(1,1,1)
             Btn.TextSize = 15
             Btn.Font = Enum.Font.SourceSans
+            Btn.AutoButtonColor = false
             Btn.Parent = MainPanel
             AddRound(Btn,7)
             AddHover(Btn)
+
             Btn.Activated:Connect(function()
-                UpdateStatus()  -- 点击时刷新状态
+                PlayClickSound()
+                print("🔘 点击了按钮："..name)
+                UpdateStatus()
                 if targetPlayerName == "" then
-                    warn("请先填写目标玩家ID！")
+                    warn("⚠ 请先输入目标玩家名！")
                     return
                 end
                 RemoteSetTargetSpeed(targetPlayerName, val)
-                Btn.BackgroundColor3 = Color3.new(0.3,0.15,0.5)
-                task.wait(0.12)
-                Btn.BackgroundColor3 = Color3.new(0.12,0.12,0.18)
+                -- 按钮变色反馈
+                Btn.BackgroundColor3 = Color3.fromRGB(100,40,200)
+                task.wait(0.15)
+                Btn.BackgroundColor3 = Color3.fromRGB(30,30,45)
             end)
         end
 
-        MakeSpeedBtn(146, "远程速度 30", 30)
-        MakeSpeedBtn(192, "远程速度 80", 80)
-        MakeSpeedBtn(238, "恢复默认16", 16)
+        MakeSpeedBtn(150, "远程速度 30", 30)
+        MakeSpeedBtn(196, "远程速度 80", 80)
+        MakeSpeedBtn(242, "恢复默认 16", 16)
 
-        print("✅ UI加载完成")
-        print("📌 当前远程事件名：" .. RemoteEventName)
-        UpdateStatus()
+        print("✅ 自检版UI加载完成，点开关按钮应听到声音+看到面板")
+        print("📌 远程事件名: "..RemoteEventName)
     end)
     if not success then
-        warn("❌ 脚本错误：" .. tostring(err))
+        warn("❌ 脚本致命错误: "..tostring(err))
     end
 end)
