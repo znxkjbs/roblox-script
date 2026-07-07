@@ -8,11 +8,9 @@ task.spawn(function()
         local targetSpeed = 16
         local currentAppliedSpeed = 16
         local hum = nil
-        -- 远程配置
-        local RemoteEventName = "SetWalkSpeedEvent" -- 需替换游戏真实远程事件名
+        local RemoteEventName = "SetWalkSpeedEvent"
         local targetPlayerName = ""
 
-        -- 低频率缓冲锁自身速度，降低检测
         local function SafeSetSelfSpeed()
             local c = lp.Character
             if not c then return end
@@ -27,39 +25,33 @@ task.spawn(function()
             end
         end
 
-        -- 持续循环刷新自身速度
         task.spawn(function()
             while task.wait(0.05) do
                 SafeSetSelfSpeed()
             end
         end)
 
-        -- 角色重生同步速度
         lp.CharacterAdded:Connect(function()
             task.wait(0.15)
             SafeSetSelfSpeed()
         end)
 
-        -- 远程发包核心函数（修改目标玩家真实速度，全房间可见）
         local function RemoteSetTargetSpeed(playerName, speed)
             local Remote = ReplicatedStorage:FindFirstChild(RemoteEventName)
             if not Remote then
-                warn("未找到远程事件："..RemoteEventName.."，远程功能失效")
+                warn("未找到远程事件，远程功能失效")
                 return false
             end
             local targetPlr = Players:FindFirstChild(playerName)
             if not targetPlr then
-                warn("未找到玩家："..playerName)
+                warn("未找到目标玩家")
                 return false
             end
-            -- 限制速度区间防封
             local safeSpeed = math.clamp(speed, 1, 120)
             Remote:FireServer(targetPlr, safeSpeed)
-            print("已向服务器发送修改请求，目标："..playerName.." 速度："..safeSpeed)
             return true
         end
 
-        -- 顶层UI容器
         local ScreenGui = Instance.new("ScreenGui")
         ScreenGui.Name = "MenuUI"
         ScreenGui.ResetOnSpawn = false
@@ -67,7 +59,6 @@ task.spawn(function()
         ScreenGui.ZIndexBehavior = Enum.ZIndexBehavior.Sibling
         ScreenGui.Parent = lp.PlayerGui
 
-        -- 可拖动悬浮开关按钮
         local ToggleBtn = Instance.new("TextButton")
         ToggleBtn.Size = UDim2.new(0, 120, 0, 44)
         ToggleBtn.Position = UDim2.new(0.76, 0, 0.32, 0)
@@ -81,7 +72,6 @@ task.spawn(function()
         ToggleBtn.ZIndex = 9999
         ToggleBtn.Parent = ScreenGui
 
-        -- 可拖动主面板
         local MainPanel = Instance.new("Frame")
         MainPanel.Size = UDim2.new(0, 330, 0, 480)
         MainPanel.Position = UDim2.new(0.02, 0, 0.21, 0)
@@ -99,7 +89,6 @@ task.spawn(function()
             MainPanel.Visible = panelOpen
         end
 
-        -- 悬浮按钮拖拽逻辑
         local dragBtn = false
         local btnStartPos, touchStart, dragDistance
         ToggleBtn.InputBegan:Connect(function(input)
@@ -126,11 +115,10 @@ task.spawn(function()
         ToggleBtn.MouseButton1Click:Connect(SwitchPanel)
         ToggleBtn.TouchTap:Connect(SwitchPanel)
 
-        -- 主面板整体拖动
         local dragPanel = false
         local panelStartPos, panelTouchStart
         MainPanel.InputBegan:Connect(function(input)
-            if input.UserInputType == Enum.UserInputType.Touch or input.UserInputType == Enum.UserInputType.MouseButton1 then
+            if input.UserInputType == Enum.UserInputType.Touch or input.UserInputType.MouseButton1 then
                 dragPanel = true
                 panelTouchStart = input.Position
                 panelStartPos = MainPanel.Position
@@ -146,7 +134,6 @@ task.spawn(function()
             dragPanel = false
         end)
 
-        -- 面板标题
         local TitleText = Instance.new("TextLabel")
         TitleText.Size = UDim2.new(1, -20, 0, 30)
         TitleText.Position = UDim2.new(0, 10, 0, 10)
@@ -157,7 +144,6 @@ task.spawn(function()
         TitleText.Font = Enum.Font.SourceSansBold
         TitleText.Parent = MainPanel
 
-        -- 左侧通用标签按钮
         local TabCommon = Instance.new("TextButton")
         TabCommon.Size = UDim2.new(0, 60, 0, 32)
         TabCommon.Position = UDim2.new(0, 10, 0, 50)
@@ -170,7 +156,6 @@ task.spawn(function()
         TabCommon.Font = Enum.Font.SourceSansBold
         TabCommon.Parent = MainPanel
 
-        -- 右侧滚动功能区
         local ContentFrame = Instance.new("ScrollingFrame")
         ContentFrame.Size = UDim2.new(1, -88, 1, -96)
         ContentFrame.Position = UDim2.new(0, 78, 0, 90)
@@ -183,7 +168,6 @@ task.spawn(function()
         ListLayout.Padding = UDim.new(0, 10)
         ListLayout.Parent = ContentFrame
 
-        -- 自身速度文字显示
         local SpeedDisplay = Instance.new("TextLabel")
         SpeedDisplay.Size = UDim2.new(1, 0, 0, 28)
         SpeedDisplay.BackgroundTransparency = 1
@@ -193,7 +177,6 @@ task.spawn(function()
         SpeedDisplay.TextXAlignment = Enum.TextXAlignment.Left
         SpeedDisplay.Parent = ContentFrame
 
-        -- 自身速度选择按钮
         local SpeedButtons = {
             {Name = "速度 1", Value = 1},
             {Name = "速度 16", Value = 16},
@@ -225,7 +208,6 @@ task.spawn(function()
             end)
         end
 
-        -- 远程功能区域
         local RemoteTip = Instance.new("TextLabel")
         RemoteTip.Size = UDim2.new(1,0,0,26)
         RemoteTip.BackgroundTransparency = 1
@@ -235,7 +217,6 @@ task.spawn(function()
         RemoteTip.TextXAlignment = Enum.TextXAlignment.Center
         RemoteTip.Parent = ContentFrame
 
-        -- 目标玩家名称输入框
         local TargetInput = Instance.new("TextBox")
         TargetInput.Size = UDim2.new(1,0,0,34)
         TargetInput.BackgroundColor3 = Color3.fromRGB(25,25,25)
@@ -249,7 +230,6 @@ task.spawn(function()
             targetPlayerName = TargetInput.Text
         end)
 
-        -- 远程速度按钮生成器
         local function addRemoteBtn(name, speedVal)
             local Btn = Instance.new("TextButton")
             Btn.Size = UDim2.new(1, 0, 0, 36)
@@ -274,12 +254,10 @@ task.spawn(function()
             end)
         end
 
-        -- 远程速度档位
         addRemoteBtn("远程速度30", 30)
         addRemoteBtn("远程速度80", 80)
         addRemoteBtn("远程恢复16", 16)
 
-        -- 跳跃功能按钮
         local function addFuncBtn(name,callback)
             local Btn = Instance.new("TextButton")
             Btn.Size = UDim2.new(1, 0, 0, 36)
