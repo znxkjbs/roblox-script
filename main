@@ -37,7 +37,7 @@ task.spawn(function()
 
         -- 角色重生同步速度
         lp.CharacterAdded:Connect(function()
-            task.wait(0.15)
+            task.wait(0.2)
             SafeSetSelfSpeed()
         end)
 
@@ -104,7 +104,7 @@ task.spawn(function()
         local ScreenGui = Instance.new("ScreenGui")
         ScreenGui.Name = "MenuUI"
         ScreenGui.ResetOnSpawn = false
-        ScreenGui.DisplayOrder = 99999
+        ScreenGui.DisplayOrder = 999999 -- 拉高层级，防止游戏UI遮挡
         ScreenGui.ZIndexBehavior = Enum.ZIndexBehavior.Sibling
         ScreenGui.Parent = lp.PlayerGui
 
@@ -118,7 +118,8 @@ task.spawn(function()
         ToggleBtn.TextColor3 = Color3.new(1, 1, 1)
         ToggleBtn.TextSize = 16
         ToggleBtn.Font = Enum.Font.GothamBold
-        ToggleBtn.ZIndex = 9999
+        ToggleBtn.ZIndex = 999999
+        ToggleBtn.Active = true -- 强制开启交互
         ToggleBtn.Parent = ScreenGui
         AddRound(ToggleBtn, 10)
         AddShadow(ToggleBtn, 6, 2, 2, Color3.new(0,0,0), 0.4)
@@ -133,7 +134,7 @@ task.spawn(function()
         MainPanel.BorderSizePixel = 0
         MainPanel.Visible = false
         MainPanel.Active = true
-        MainPanel.ZIndex = 9998
+        MainPanel.ZIndex = 999998
         MainPanel.Parent = ScreenGui
         AddRound(MainPanel, 14)
         AddShadow(MainPanel, 12, 3, 3, Color3.new(0,0,0), 0.35)
@@ -143,11 +144,13 @@ task.spawn(function()
         local function SwitchPanel()
             panelOpen = not panelOpen
             MainPanel.Visible = panelOpen
+            print("面板切换：", panelOpen) -- 调试打印，判断函数是否触发
         end
 
-        -- 悬浮按钮拖拽逻辑
+        -- 悬浮按钮拖拽逻辑【修复：提高拖拽阈值，减少误触】
         local dragBtn = false
         local btnStartPos, touchStart, dragDistance
+        local DRAG_THRESHOLD = 35 -- 原来22改成35，不容易误判定拖拽
         ToggleBtn.InputBegan:Connect(function(input)
             if input.UserInputType == Enum.UserInputType.Touch or input.UserInputType == Enum.UserInputType.MouseButton1 then
                 dragBtn = true
@@ -164,13 +167,15 @@ task.spawn(function()
             end
         end)
         ToggleBtn.InputEnded:Connect(function(input)
-            if input.UserInputType == Enum.UserInputType.Touch or input.UserInputType.MouseButton1 then
+            if input.UserInputType == Enum.UserInputType.Touch or input.UserInputType == Enum.UserInputType.MouseButton1 then
                 dragBtn = false
-                if dragDistance < 22 then SwitchPanel() end
+                -- 只有拖动距离小于阈值才触发点击
+                if dragDistance < DRAG_THRESHOLD then
+                    SwitchPanel()
+                end
             end
         end)
-        ToggleBtn.MouseButton1Click:Connect(SwitchPanel)
-        ToggleBtn.TouchTap:Connect(SwitchPanel)
+        -- 移除重复的MouseButton1Click、TouchTap绑定，避免冲突
 
         -- 主面板整体拖动
         local dragPanel = false
@@ -364,7 +369,7 @@ task.spawn(function()
         addFuncBtn("重置跳跃", function() if hum then hum.JumpPower = 7.2 end end)
 
         ContentFrame.CanvasSize = UDim2.new(0, 0, 0, ListLayout.AbsoluteContentSize.Y)
-        print("✅ 精致美化UI加载完成，自身加速+远程发包功能已就绪")
+        print("✅ 修复版UI加载完成，点击冲突已解决")
     end)
     if not success then
         warn("脚本报错："..tostring(err))
