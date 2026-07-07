@@ -6,24 +6,19 @@ task.spawn(function()
         local lp = Players.LocalPlayer
         local targetPlayerName = ""
 
-        -- ⚠️ 把这里改成游戏里真实存在的 RemoteEvent 名字（必须一模一样）
+        -- ⚠️ 改成游戏ReplicatedStorage里真实RemoteEvent名称
         local RemoteEventName = "SetWalkSpeedEvent"
 
-        -- 尝试获取远程事件，失败时列出所有子项辅助排查
+        -- 自动查找远程事件，打印全部事件用于排查
         local function getRemote()
             local remote = ReplicatedStorage:FindFirstChild(RemoteEventName)
             if remote and remote:IsA("RemoteEvent") then
                 return remote
             end
-            -- 打印当前 ReplicatedStorage 下的所有子项名称
-            warn("⚠️ 未找到远程事件 [" .. RemoteEventName .. "]，当前 ReplicatedStorage 内包含：")
+            warn("⚠️ 未找到远程事件 [" .. RemoteEventName .. "]，当前ReplicatedStorage内可用远程：")
             for _, child in ipairs(ReplicatedStorage:GetChildren()) do
                 if child:IsA("RemoteEvent") then
                     warn("  远程事件: " .. child.Name)
-                elseif child:IsA("RemoteFunction") then
-                    warn("  远程函数: " .. child.Name)
-                elseif child:IsA("Folder") then
-                    warn("  文件夹: " .. child.Name)
                 end
             end
             return nil
@@ -31,39 +26,37 @@ task.spawn(function()
 
         local Remote = getRemote()
 
-        -- 远程发包函数
+        -- 远程发包函数（修复参数：统一传递玩家对象，适配绝大多数游戏服务端）
         local function RemoteSetTargetSpeed(playerName, speed)
             if not Remote then
-                Remote = getRemote()  -- 再次尝试
+                Remote = getRemote()
                 if not Remote then
-                    warn("[远程失败] 远程事件 [" .. RemoteEventName .. "] 不存在或类型错误")
+                    warn("[远程失败] 远程事件不存在")
                     return false
                 end
             end
 
             local targetPlr = Players:FindFirstChild(playerName)
             if not targetPlr then
-                warn("[远程失败] 玩家 [" .. playerName .. "] 不在服务器内")
+                warn("[远程失败] 玩家 [" .. playerName .. "] 不在房间")
                 return false
             end
 
             local safeSpeed = math.clamp(speed, 1, 120)
-            -- 多数游戏服务器期望接收玩家名字而非对象，可根据实际情况调整
-            local args = {targetPlr.Name, safeSpeed}  -- 若需直接传对象，改为 {targetPlr, safeSpeed}
-            print("📤 发送远程: " .. Remote.Name, "参数:", unpack(args))
+            print("📤 发送远程: " .. Remote.Name, "目标玩家:", targetPlr.Name, "速度:", safeSpeed)
 
             local fireOk, fireErr = pcall(function()
-                Remote:FireServer(unpack(args))
+                Remote:FireServer(targetPlr, safeSpeed) -- 标准传参：玩家对象+速度
             end)
             if not fireOk then
-                warn("[远程失败] FireServer 出错: " .. tostring(fireErr))
+                warn("[远程发包报错] " .. tostring(fireErr))
                 return false
             end
             print("✅ 发包完成")
             return true
         end
 
-        -- ============ UI 工具函数 ============
+        -- ============ UI工具函数 ============
         local function AddRound(obj, r)
             local c = Instance.new("UICorner")
             c.CornerRadius = UDim.new(0, r)
@@ -89,18 +82,19 @@ task.spawn(function()
             btn.MouseLeave:Connect(function() t2:Play() end)
         end
 
-        -- ============ 顶层 GUI ============
+        -- ============ 顶层GUI（新增IgnoreGuiInset修复边缘遮挡） ============
         local ScreenGui = Instance.new("ScreenGui")
         ScreenGui.Name = "RemoteOnlyGUI"
         ScreenGui.ResetOnSpawn = false
         ScreenGui.DisplayOrder = 99999999
         ScreenGui.ZIndexBehavior = Enum.ZIndexBehavior.Sibling
+        ScreenGui.IgnoreGuiInset = true -- 关键修复：突破手机安全边距，边缘按钮可点击
         ScreenGui.Parent = lp.PlayerGui
 
-        -- 悬浮开关
+        -- 悬浮开关【调整位置，避开右侧摇杆遮挡区】
         local ToggleBtn = Instance.new("TextButton")
         ToggleBtn.Size = UDim2.new(0, 120, 0, 44)
-        ToggleBtn.Position = UDim2.new(0.76, 0, 0.32, 0)
+        ToggleBtn.Position = UDim2.new(0.6, 0, 0.32, 0) -- 从0.76左移到0.6，远离右侧摇杆
         ToggleBtn.BackgroundColor3 = Color3.new(0.12,0.12,0.16)
         ToggleBtn.BorderSizePixel = 0
         ToggleBtn.Text = "功能开关"
@@ -133,7 +127,7 @@ task.spawn(function()
         local function SwitchPanel()
             panelOpen = not panelOpen
             MainPanel.Visible = panelOpen
-            print("面板状态:", panelOpen)
+            print("【点击触发】面板状态:", panelOpen)
         end
         ToggleBtn.Activated:Connect(SwitchPanel)
 
@@ -206,12 +200,12 @@ task.spawn(function()
         MakeSpeedBtn(176, "远程速度 80", 80)
         MakeSpeedBtn(222, "恢复默认16", 16)
 
-        print("✅ 远程菜单加载完成，请根据上方提示核对远程事件名")
-        print("📌 当前使用的远程事件: " .. RemoteEventName)
+        print("✅ 远程菜单加载完成")
+        print("📌 当前使用远程事件: " .. RemoteEventName)
         if Remote then
-            print("✔ 远程事件已找到，可以正常使用")
+            print("✔ 远程事件已识别，发包功能正常")
         else
-            warn("❌ 远程事件未找到，请在输出中查看可用事件并修改 RemoteEventName")
+            warn("❌ 未找到对应远程事件，请查看上方打印的可用事件名称修改代码")
         end
     end)
     if not success then
