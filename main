@@ -1,4 +1,6 @@
--- 稳定全自动版（2~3秒换服，带错误恢复，自动重连）
+-- 白名单模式：只捡名字为 "Moneyprinter" 的物品
+local TARGET_NAME = "Moneyprinter"  -- 精准匹配，区分大小写
+
 local Players = game:GetService("Players")
 local TeleportService = game:GetService("TeleportService")
 local TweenService = game:GetService("TweenService")
@@ -6,20 +8,19 @@ local player = Players.LocalPlayer
 local placeId = game.PlaceId
 local currentJobId = game.JobId
 
--- 配置（你可以把 Min/Max 改回 0.9/1.1 变回1秒）
 local CONFIG = {
-    MinInterval = 2,    -- 最小间隔（秒）
-    MaxInterval = 3,    -- 最大间隔（秒）
+    MinInterval = 2,    -- 换服间隔（秒），可改成 0.9 变1秒
+    MaxInterval = 3,
     TweenDuration = 0.4,
     PickupDelay = 0.1,
     Offset = Vector3.new(1.2, 0, 0)
 }
 
--- 黑名单（强过滤）
+-- 黑名单（路径含这些词的，直接跳过）
 local BLACKLIST = {"shop","store","menu","health","mobile","play","character","backpack",
-                   "生命","移动","商店","健康","r-mobile","血包","医疗","vending"}
+                   "生命","移动","商店","健康","r-mobile","血包","医疗"}
 
--- 状态UI（显示在左上角）
+-- 状态UI
 local function createUI()
     local gui = Instance.new("ScreenGui")
     gui.Parent = player:WaitForChild("PlayerGui")
@@ -36,10 +37,9 @@ local function createUI()
 end
 local statusLabel = createUI()
 local function setStatus(t) pcall(function() statusLabel.Text = t end) end
+setStatus("目标: " .. TARGET_NAME)
 
-setStatus("脚本加载中...")
-
--- 防封清除UI
+-- 防封
 local function cleanAntiCheat()
     for _,r in pairs({player:WaitForChild("PlayerGui"), game:GetService("CoreGui")}) do
         for _,v in pairs(r:GetChildren()) do
@@ -51,36 +51,54 @@ local function cleanAntiCheat()
     end
 end
 
--- 搜索目标（只认名字同时含 "money" 和 "printer"）
+-- 只捡名字完全等于 TARGET_NAME 的物品
 local function findTarget()
     local target = nil
     local function search(inst)
         if target then return end
         local path = inst:GetFullName():lower()
-        for _,w in pairs(BLACKLIST) do if path:find(w) then return end end
+        for _,w in ipairs(BLACKLIST) do
+            if path:find(w) then return end
+        end
         if inst:IsA("BasePart") or inst:IsA("Model") or inst:IsA("Tool") then
-            local name = inst.Name:lower()
-            if name:find("money") and name:find("printer") then
+            local name = inst.Name:gsub("^%s+", ""):gsub("%s+$", "")  -- 去首尾空格
+            if name == TARGET_NAME then
                 local click = inst:FindFirstChild("ClickDetector") or inst:FindFirstChildOfClass("ClickDetector")
-                if click or inst:IsA("Tool") then target = inst return end
+                if click or inst:IsA("Tool") then
+                    target = inst
+                    print("🎯 找到目标:", inst:GetFullName())
+                    setStatus("✅ 找到 Moneyprinter!")
+                    return
+                end
             end
         end
-        for _,c in pairs(inst:GetChildren()) do search(c) if target then return end end
+        for _,c in pairs(inst:GetChildren()) do
+            search(c)
+            if target then return end
+        end
     end
     pcall(search, workspace)
     return target
 end
 
--- 拾取函数
+-- 拾取
 local function collect()
     local t = findTarget()
-    if not t then setStatus("❌ 未找到"); return false end
+    if not t then
+        setStatus("❌ 未找到 Moneyprinter")
+        return false
+    end
     local pos = nil
-    if t:IsA("Model") and t.PrimaryPart then pos = t.PrimaryPart.Position
-    elseif t:IsA("BasePart") then pos = t.Position
-    elseif t:IsA("Tool") and t:FindFirstChild("Handle") then pos = t.Handle.Position
+    if t:IsA("Model") and t.PrimaryPart then
+        pos = t.PrimaryPart.Position
+    elseif t:IsA("BasePart") then
+        pos = t.Position
+    elseif t:IsA("Tool") and t:FindFirstChild("Handle") then
+        pos = t.Handle.Position
     else
-        for _,c in pairs(t:GetDescendants()) do if c:IsA("BasePart") then pos = c.Position break end end
+        for _,c in pairs(t:GetDescendants()) do
+            if c:IsA("BasePart") then pos = c.Position break end
+        end
     end
     if not pos then return false end
     local char = player.Character
@@ -89,12 +107,22 @@ local function collect()
     local cf = CFrame.new(pos + CONFIG.Offset)
     setStatus("🚀 传送中...")
     local tw = TweenService:Create(hrp, TweenInfo.new(CONFIG.TweenDuration, Enum.EasingStyle.Linear, Enum.EasingDirection.Out), {CFrame=cf})
-    tw:Play(); tw.Completed:Wait(); wait(CONFIG.PickupDelay)
+    tw:Play()
+    tw.Completed:Wait()
+    wait(CONFIG.PickupDelay)
     local cd = t:FindFirstChild("ClickDetector") or t:FindFirstChildOfClass("ClickDetector")
-    if cd then pcall(function() cd:FireClick(player) end); setStatus("✅ 拾取成功!"); return true end
+    if cd then
+        pcall(function() cd:FireClick(player) end)
+        setStatus("✅ 拾取成功!")
+        return true
+    end
     if t:IsA("Tool") then
         local h = char:FindFirstChild("Humanoid")
-        if h then pcall(function() h:EquipTool(t) end); setStatus("✅ 装备成功!"); return true end
+        if h then
+            pcall(function() h:EquipTool(t) end)
+            setStatus("✅ 装备成功!")
+            return true
+        end
     end
     setStatus("✅ 已靠近")
     return true
@@ -107,7 +135,9 @@ local function hop()
     local ok, res = pcall(function() return TeleportService:GetServerList(placeId) end)
     if ok and res then
         for _,s in pairs(res) do
-            if s.Id ~= currentJobId and s.PlayerCount < s.MaxPlayers then table.insert(servers, s) end
+            if s.Id ~= currentJobId and s.PlayerCount < s.MaxPlayers then
+                table.insert(servers, s)
+            end
         end
     end
     if #servers > 0 then
@@ -118,41 +148,20 @@ local function hop()
     end
 end
 
--- ===== 主循环（带错误恢复和重启机制） =====
-local function mainLoop()
-    while true do
-        local success, err = pcall(function()
-            -- 等待角色加载
-            repeat wait(0.3) until player.Character and player.Character:FindFirstChild("HumanoidRootPart")
-            wait(0.5)
-            -- 执行拾取
-            collect()
-            -- 随机间隔
-            local wt = math.random(CONFIG.MinInterval*10, CONFIG.MaxInterval*10)/10
-            setStatus("⏳ "..string.format("%.1f", wt).."秒后换服")
-            wait(wt)
-            -- 换服
-            hop()
-            currentJobId = game.JobId
-            wait(0.3)
-        end)
-        if not success then
-            -- 如果发生错误，记录并重启循环
-            print("⚠️ 检测到错误，重启循环: " .. tostring(err))
-            setStatus("⚠️ 错误重启中...")
-            wait(2)  -- 等待2秒再继续
-        end
-    end
-end
-
--- 启动
+-- 主循环
 spawn(function()
     cleanAntiCheat()
-    -- 延迟一小会儿再启动
     wait(1)
-    print("🔥 稳定版启动，间隔 "..CONFIG.MinInterval.."~"..CONFIG.MaxInterval.." 秒")
-    setStatus("✅ 启动成功")
-    mainLoop()
+    print("🔥 白名单版启动，目标名称: " .. TARGET_NAME)
+    while true do
+        repeat wait(0.3) until player.Character and player.Character:FindFirstChild("HumanoidRootPart")
+        wait(0.5)
+        pcall(collect)
+        local wt = math.random(CONFIG.MinInterval*10, CONFIG.MaxInterval*10)/10
+        setStatus("⏳ "..string.format("%.1f", wt).."秒后换服")
+        wait(wt)
+        pcall(hop)
+        currentJobId = game.JobId
+        wait(0.3)
+    end
 end)
-
-print("🔥 稳定版脚本已加载，如遇错误会自动重启。")
