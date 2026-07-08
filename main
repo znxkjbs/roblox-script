@@ -1,15 +1,37 @@
---[[
-  严苛版：只捡名字同时含 "money" 和 "printer" 的物品
-  强制过滤商店/Health/Mobile/Play等路径
-  1秒换服（带随机抖动）
-  全自动循环
---]]
+-- 最终精确版：只捡名字为 "MoneyPrinter" 或 "Money Printer" 的物品
 local Players = game:GetService("Players")
 local TeleportService = game:GetService("TeleportService")
 local TweenService = game:GetService("TweenService")
 local player = Players.LocalPlayer
 local placeId = game.PlaceId
 local currentJobId = game.JobId
+
+-- 创建状态显示UI（在游戏画面左上角）
+local function createStatusUI()
+    local screenGui = Instance.new("ScreenGui")
+    screenGui.Parent = player:WaitForChild("PlayerGui")
+    screenGui.Name = "OhioStatusUI"
+    local textLabel = Instance.new("TextLabel")
+    textLabel.Size = UDim2.new(0, 300, 0, 50)
+    textLabel.Position = UDim2.new(0, 10, 0, 10)
+    textLabel.BackgroundColor3 = Color3.fromRGB(0, 0, 0)
+    textLabel.BackgroundTransparency = 0.5
+    textLabel.TextColor3 = Color3.fromRGB(255, 255, 255)
+    textLabel.TextScaled = true
+    textLabel.Text = "等待启动..."
+    textLabel.Parent = screenGui
+    return textLabel
+end
+
+local statusLabel = createStatusUI()
+
+local function updateStatus(text)
+    pcall(function()
+        statusLabel.Text = text
+    end)
+end
+
+updateStatus("脚本加载中...")
 
 local CONFIG = {
     MinInterval = 0.9,
@@ -19,8 +41,14 @@ local CONFIG = {
     Offset = Vector3.new(1.2, 0, 0)
 }
 
-local PATH_BLACKLIST = {"shop", "store", "menu", "health", "mobile", "play", "character", "backpack"}
+-- 黑名单（路径或名称包含这些词的，一概跳过）
+local BLACKLIST = {
+    "shop", "store", "menu", "health", "mobile", "play", 
+    "character", "backpack", "生命", "移动", "商店", "健康", 
+    "r-mobile", "血包", "医疗", "cash", "atm", "vending"
+}
 
+-- 清除反作弊UI（防封）
 local function disableLocalAntiCheat()
     local guiRoots = {player:WaitForChild("PlayerGui"), game:GetService("CoreGui")}
     for _, root in ipairs(guiRoots) do
@@ -34,25 +62,33 @@ local function disableLocalAntiCheat()
     end
 end
 
+-- 精确搜索：只认 "MoneyPrinter" 或 "Money Printer"（忽略大小写和空格）
 local function findMoneyPrinter()
     local target = nil
     local function search(instance)
         if target then return end
+        -- 先检查路径黑名单
         local fullPath = instance:GetFullName():lower()
-        for _, word in ipairs(PATH_BLACKLIST) do
-            if fullPath:find(word) then return end
+        for _, word in ipairs(BLACKLIST) do
+            if fullPath:find(word) then
+                return -- 跳过该分支
+            end
         end
+        -- 检查名称
         if instance:IsA("BasePart") or instance:IsA("Model") or instance:IsA("Tool") then
-            local name = instance.Name:lower()
-            if name:find("money") and name:find("printer") then
+            local name = instance.Name:gsub("%s+", "") -- 去掉所有空格
+            if name:lower() == "moneyprinter" then
+                -- 确保有交互能力
                 local hasClick = instance:FindFirstChild("ClickDetector") or instance:FindFirstChildOfClass("ClickDetector")
                 if hasClick or instance:IsA("Tool") then
                     target = instance
-                    print("🎯 找到:", instance:GetFullName())
+                    print("🎯 找到目标:", instance:GetFullName())
+                    updateStatus("✅ 找到 Money Printer")
                     return
                 end
             end
         end
+        -- 递归子对象
         for _, child in ipairs(instance:GetChildren()) do
             search(child)
             if target then return end
@@ -62,12 +98,16 @@ local function findMoneyPrinter()
     return target
 end
 
+-- 传送+拾取
 local function findAndCollect()
     local target = findMoneyPrinter()
     if not target then
+        updateStatus("❌ 未找到 Money Printer")
         print("❌ 未找到 Money Printer")
         return false
     end
+
+    -- 获取坐标
     local targetPos = nil
     if target:IsA("Model") and target.PrimaryPart then
         targetPos = target.PrimaryPart.Position
@@ -84,19 +124,26 @@ local function findAndCollect()
         end
     end
     if not targetPos then return false end
+
     local character = player.Character
     if not character or not character:FindFirstChild("HumanoidRootPart") then return false end
     local hrp = character.HumanoidRootPart
     local targetCFrame = CFrame.new(targetPos + CONFIG.Offset)
+
+    -- 平滑移动
+    updateStatus("🚀 传送中...")
     local tweenInfo = TweenInfo.new(CONFIG.TweenDuration, Enum.EasingStyle.Linear, Enum.EasingDirection.Out)
     local tween = TweenService:Create(hrp, tweenInfo, {CFrame = targetCFrame})
     tween:Play()
     tween.Completed:Wait()
     wait(CONFIG.PickupDelay)
+
+    -- 自动拾取
     local clickDetector = target:FindFirstChild("ClickDetector") or target:FindFirstChildOfClass("ClickDetector")
     if clickDetector then
         pcall(function() clickDetector:FireClick(player) end)
         print("✅ 拾取成功")
+        updateStatus("✅ 拾取成功!")
         return true
     end
     if target:IsA("Tool") then
@@ -104,14 +151,17 @@ local function findAndCollect()
         if humanoid then
             pcall(function() humanoid:EquipTool(target) end)
             print("✅ 装备成功")
+            updateStatus("✅ 装备成功!")
             return true
         end
     end
-    print("✅ 已靠近")
+    updateStatus("✅ 已靠近（手动交互）")
     return true
 end
 
+-- 换服
 local function hopToNewServer()
+    updateStatus("🔄 换服中...")
     local servers = {}
     local success, result = pcall(function()
         return TeleportService:GetServerList(placeId)
@@ -133,6 +183,7 @@ local function hopToNewServer()
     end
 end
 
+-- 主循环
 spawn(function()
     disableLocalAntiCheat()
     while true do
@@ -140,7 +191,7 @@ spawn(function()
         wait(0.5)
         pcall(findAndCollect)
         local waitTime = math.random(CONFIG.MinInterval * 100, CONFIG.MaxInterval * 100) / 100
-        print("⏳ 等待 " .. waitTime .. " 秒换服")
+        updateStatus("⏳ " .. string.format("%.1f", waitTime) .. "秒后换服")
         wait(waitTime)
         pcall(hopToNewServer)
         currentJobId = game.JobId
@@ -148,4 +199,5 @@ spawn(function()
     end
 end)
 
-print("🔥 远程加载版已启动 | 只捡同时含 money 和 printer 的物品，跳过商店杂项")
+print("🔥 最终精确版已启动：只捡名称为 'MoneyPrinter' 的物品！")
+updateStatus("✅ 脚本启动成功")
