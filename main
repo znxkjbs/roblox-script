@@ -1,20 +1,3 @@
--- 探测脚本：列出所有可交互物品的名字（不拾取，不换服）
-local function listItems()
-    local count = 0
-    local function scan(inst, path)
-        if inst:IsA("BasePart") or inst:IsA("Model") or inst:IsA("Tool") then
-            local click = inst:FindFirstChild("ClickDetector") or inst:FindFirstChildOfClass("ClickDetector")
-            if click or inst:IsA("Tool") then
-                count = count + 1
-                print(count .. ". " .. inst.Name .. "  |  路径: " .. inst:GetFullName())
-            end
-        end
-        for _, child in ipairs(inst:GetChildren()) do
-            scan(child, path .. "/" .. child.Name)
-        end
-    end
-    scan(workspace, "workspace")
-    print("==== 共找到 " .. count .. " 个可交互物品 ====")
-end
-
-listItems()
+-- 探print("✅ 测试脚本运行成功！")
+print("当前玩家: " .. game:GetService("Players").LocalPlayer.Name)
+print("游戏ID: " .. game.PlaceId)
